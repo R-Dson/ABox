@@ -31,12 +31,13 @@ Or specify a directory:
 abx /path/to/project
 ```
 
+
 You can also pass additional arguments to opencode:
 
 ```bash
 abx --help                    # Show opencode help
 abx /path/to/project --help   # Same thing
-abx --other-opencode-flag    # Pass flags to opencode
+abx --other-opencode-flag     # Pass flags to opencode
 ```
 
 ## Configuration
