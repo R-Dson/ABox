@@ -49,7 +49,7 @@ if [[ "$PWD" == "$HOME" ]]; then
 fi
 
 if [[ ! -d "$HOST_CONFIG_DIR" ]]; then
-    echo "⚠️  WARNING: Host config directory $HOST_CONFIG_DIR does not exist."
+    echo "WARNING: Host config directory $HOST_CONFIG_DIR does not exist."
     echo "Creating it now..."
     mkdir -p "$HOST_CONFIG_DIR"
 fi
@@ -65,7 +65,7 @@ trap cleanup EXIT
 
 # 3. Copy Auth Keys to Airlock (Permission Normalization)
 if [[ -z "$(ls -A "$HOST_CONFIG_DIR" 2>/dev/null)" ]]; then
-    echo "⚠️  WARNING: Host config directory $HOST_CONFIG_DIR is empty."
+    echo "WARNING: Host config directory $HOST_CONFIG_DIR is empty."
 fi
 
 # We use :ro,z to handle SELinux on systems like Fedora/Bazzite

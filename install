@@ -1,0 +1,78 @@
+#!/bin/bash
+set -e
+
+# ABox Installation Script
+# Usage: curl -fsSL https://raw.githubusercontent.com/R-Dson/ABox/main/install | bash
+
+REPO="R-Dson/ABox"
+BINARY_NAME="abx"
+RAW_URL="https://raw.githubusercontent.com/$REPO/main/bin/abx"
+
+echo "ABox Installation"
+echo "-------------------"
+
+# Check if curl is installed
+if ! command -v curl >/dev/null 2>&1; then
+    echo "Error: curl is required for installation."
+    exit 1
+fi
+
+# Ask for installation type
+echo "Where would you like to install ABox?"
+echo "1) System-wide (/usr/local/bin) - Requires sudo"
+echo "2) User-local (~/.local/bin)    - No sudo needed"
+read -rp "Select an option [1-2]: " choice
+
+case $choice in
+    1)
+        INSTALL_DIR="/usr/local/bin"
+        USE_SUDO=true
+        ;;
+    2)
+        INSTALL_DIR="$HOME/.local/bin"
+        USE_SUDO=false
+        mkdir -p "$INSTALL_DIR"
+        ;;
+    *)
+        echo "Invalid option. Defaulting to User-local (~/.local/bin)."
+        INSTALL_DIR="$HOME/.local/bin"
+        USE_SUDO=false
+        mkdir -p "$INSTALL_DIR"
+        ;;
+esac
+
+# Download binary
+echo "Downloading abx..."
+if ! curl -fsSL "$RAW_URL" -o "$BINARY_NAME"; then
+    echo "Error: Failed to download abx."
+    exit 1
+fi
+
+# Make executable
+chmod +x "$BINARY_NAME"
+
+# Move to install directory
+echo "Installing to $INSTALL_DIR..."
+if [ "$USE_SUDO" = true ]; then
+    if [ -w "$INSTALL_DIR" ]; then
+        mv "$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+    else
+        echo "Sudo access required for $INSTALL_DIR"
+        sudo mv "$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+    fi
+else
+    mv "$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+fi
+
+echo "ABox has been installed successfully!"
+
+# Verify PATH
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    echo ""
+    echo "WARNING: $INSTALL_DIR is not in your PATH."
+    echo "You may need to add it to your shell configuration (e.g., .bashrc or .zshrc):"
+    echo "export PATH=\"\$PATH:$INSTALL_DIR\""
+fi
+
+echo ""
+echo "Run 'abx --version' to verify."
