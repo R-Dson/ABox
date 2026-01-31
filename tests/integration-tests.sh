@@ -2,7 +2,8 @@
 # ABox Integration Tests
 # Runs the 6 test cases from PRD Section 6
 
-# Don't use set -e as we want to continue even if individual tests fail
+# Fail fast as requested
+set -e
 
 # Color output
 RED='\033[0;31m'
@@ -22,7 +23,7 @@ if command -v docker &> /dev/null; then
     fi
 fi
 
-IMAGE_NAME=${IMAGE_NAME:-"$IMAGE_NAME"}
+IMAGE_NAME=${IMAGE_NAME:-"ghcr.io/r-dson/abox:main"}
 
 echo "=========================================="
 echo "ABox Integration Tests"
@@ -53,25 +54,45 @@ run_test() {
     if eval "$test_cmd" > /dev/null 2>&1; then
         if [[ "$expected" == "pass" ]]; then
             echo -e "${GREEN}PASS${NC}"
-            ((PASS_COUNT++))
+            PASS_COUNT=$((PASS_COUNT + 1))
             return 0
         else
             echo -e "${RED}FAIL${NC} (expected to fail but passed)"
-            ((FAIL_COUNT++))
-            return 1
+            exit 1
         fi
     else
         if [[ "$expected" == "fail" ]]; then
             echo -e "${GREEN}PASS${NC}"
-            ((PASS_COUNT++))
+            PASS_COUNT=$((PASS_COUNT + 1))
             return 0
         else
             echo -e "${RED}FAIL${NC}"
-            ((FAIL_COUNT++))
-            return 1
+            exit 1
         fi
     fi
 }
+
+# Test 7: Path Safety Check
+echo "=== Test 7: Path Safety Check ==="
+echo "Verify ABox refuses to run in sensitive directories"
+ABX_BIN="$(dirname "$0")/../bin/abx"
+if [ -f "$ABX_BIN" ]; then
+    mkdir -p /tmp/abox-fail-test/usr
+    cd /tmp/abox-fail-test/usr
+    if "$ABX_BIN" >/dev/null 2>&1; then
+         echo -e "${RED}FAIL${NC}: ABox ran in /usr mock!"
+         cd - >/dev/null
+         exit 1
+    else
+         echo -e "${GREEN}PASS${NC}: ABox refused to run in sensitive directory"
+         PASS_COUNT=$((PASS_COUNT + 1))
+    fi
+    cd - >/dev/null
+    rm -rf /tmp/abox-fail-test
+else
+    echo -e "${YELLOW}SKIP${NC}: bin/abx not found for path test"
+fi
+echo
 
 # Test 1: Identity Check
 echo "=== Test 1: Identity Check ==="
@@ -83,12 +104,12 @@ TEST_OUTPUT=$($CONTAINER_CMD run --rm \
 
 if echo "$TEST_OUTPUT" | grep -q "uid=$HOST_UID(agent)"; then
     echo -e "${GREEN}PASS${NC}: Container UID matches host ($HOST_UID)"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "${RED}FAIL${NC}: Container UID does not match host"
     echo "  Expected: uid=$HOST_UID(agent)"
     echo "  Got: $TEST_OUTPUT"
-    ((FAIL_COUNT++))
+    exit 1
 fi
 echo
 
@@ -101,10 +122,10 @@ if $CONTAINER_CMD run --rm \
     -v "$PWD:/workspace" \
     $IMAGE_NAME ls "$HOST_HOME/.ssh" 2>/dev/null; then
     echo -e "${RED}FAIL${NC}: Container should NOT be able to access host ~/.ssh"
-    ((FAIL_COUNT++))
+    exit 1
 else
     echo -e "${GREEN}PASS${NC}: Container correctly isolated from host ~/.ssh"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 fi
 echo
 
@@ -112,26 +133,22 @@ echo
 echo "=== Test 3: Persistence Check ==="
 echo "Verify files in ~/.local/share/opencode persist across sessions"
 
-# Create a persistent volume
 $CONTAINER_CMD volume create abox-test-persist > /dev/null 2>&1 || true
 
-# First session: create a file
 $CONTAINER_CMD run --rm \
     -e HOST_UID=$HOST_UID \
     -e HOST_GID=$HOST_GID \
     -v "abox-test-persist:/home/agent/.local/share/opencode" \
     $IMAGE_NAME bash -c "touch /home/agent/.local/share/opencode/test-marker.txt" 2>/dev/null
 
-# Second session: check if file exists
 if $CONTAINER_CMD run --rm \
     -e HOST_UID=$HOST_UID \
     -e HOST_GID=$HOST_GID \
     -v "abox-test-persist:/home/agent/.local/share/opencode" \
     $IMAGE_NAME bash -c "test -f /home/agent/.local/share/opencode/test-marker.txt" 2>/dev/null; then
     echo -e "${GREEN}PASS${NC}: Files persist across sessions"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 
-    # Cleanup
     $CONTAINER_CMD run --rm \
         -e HOST_UID=$HOST_UID \
         -e HOST_GID=$HOST_GID \
@@ -139,7 +156,8 @@ if $CONTAINER_CMD run --rm \
         $IMAGE_NAME bash -c "rm /home/agent/.local/share/opencode/test-marker.txt" 2>/dev/null
 else
     echo -e "${RED}FAIL${NC}: Files did not persist"
-    ((FAIL_COUNT++))
+    $CONTAINER_CMD volume rm abox-test-persist > /dev/null 2>&1 || true
+    exit 1
 fi
 
 $CONTAINER_CMD volume rm abox-test-persist > /dev/null 2>&1 || true
@@ -149,57 +167,54 @@ echo
 echo "=== Test 4: Hygiene Check ==="
 echo "Verify auth volume modifications don't affect host"
 
-# Create test auth on host (if it doesn't exist)
 mkdir -p /tmp/abox-test-auth
 echo "original" > /tmp/abox-test-auth/config.txt
 
-# Copy to ephemeral volume and modify
+TEST_VOL="abox-hygiene-$(date +%s)"
+$CONTAINER_CMD volume create "$TEST_VOL" > /dev/null
+
 $CONTAINER_CMD run --rm \
-    -v "/tmp/abox-test-auth:/source:ro" \
-    -v "abox-test-auth:/dest" \
+    -v "/tmp/abox-test-auth:/source:ro,z" \
+    -v "$TEST_VOL:/dest" \
     alpine sh -c "cp /source/config.txt /dest/ && echo modified > /dest/config.txt" 2>/dev/null
 
-# Check host file is unchanged
 if grep -q "original" /tmp/abox-test-auth/config.txt 2>/dev/null; then
     echo -e "${GREEN}PASS${NC}: Host auth config unchanged (airlock working)"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "${RED}FAIL${NC}: Host auth config was modified!"
-    ((FAIL_COUNT++))
+    rm -rf /tmp/abox-test-auth
+    $CONTAINER_CMD volume rm "$TEST_VOL" > /dev/null 2>&1
+    exit 1
 fi
 
-# Cleanup
 rm -rf /tmp/abox-test-auth
-$CONTAINER_CMD volume rm abox-test-auth > /dev/null 2>&1 || true
+$CONTAINER_CMD volume rm "$TEST_VOL" > /dev/null 2>&1 || true
 echo
 
 # Test 5: Permission Check
 echo "=== Test 5: Permission Check ==="
 echo "Verify files created in container are owned by host user"
 
-# Note: This test has known limitations with podman rootless
 TEST_DIR="/tmp/abox-perm-test-$$"
 mkdir -p "$TEST_DIR"
 
-# Create file via container
 $CONTAINER_CMD run --rm \
     --userns=host \
     -e HOST_UID=$HOST_UID \
     -e HOST_GID=$HOST_GID \
-    -v "$TEST_DIR:/workspace" \
-    $IMAGE_NAME touch /workspace/test-file 2>/dev/null
+    -v "$TEST_DIR:/workspace:z" \
+    $IMAGE_NAME touch /workspace/test-file 2>/dev/null || true
 
-# Check ownership on host
 if [ -f "$TEST_DIR/test-file" ]; then
     FILE_UID=$(stat -c '%u' "$TEST_DIR/test-file" 2>/dev/null || stat -f '%u' "$TEST_DIR/test-file" 2>/dev/null)
     if [ "$FILE_UID" = "$HOST_UID" ]; then
         echo -e "${GREEN}PASS${NC}: File owned by host user ($HOST_UID)"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
         rm "$TEST_DIR/test-file"
     else
         echo -e "${YELLOW}SKIP${NC}: File ownership test requires Docker (podman limitation)"
         echo "  File UID: $FILE_UID, Host UID: $HOST_UID"
-        # Don't count as failure - this is a known platform limitation
         rm "$TEST_DIR/test-file" 2>/dev/null
     fi
 else
@@ -218,13 +233,12 @@ if $CONTAINER_CMD run --rm \
     -e HOST_GID=$HOST_GID \
     $IMAGE_NAME which sudo 2>/dev/null; then
     echo -e "${RED}FAIL${NC}: sudo should NOT be available"
-    ((FAIL_COUNT++))
+    exit 1
 else
     echo -e "${GREEN}PASS${NC}: sudo correctly not available"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 fi
 
-# Also verify we're not running as root
 TEST_OUTPUT=$($CONTAINER_CMD run --rm \
     -e HOST_UID=$HOST_UID \
     -e HOST_GID=$HOST_GID \
@@ -232,11 +246,37 @@ TEST_OUTPUT=$($CONTAINER_CMD run --rm \
 
 if echo "$TEST_OUTPUT" | grep -q "uid=0"; then
     echo -e "${RED}FAIL${NC}: Container should NOT run as root"
-    ((FAIL_COUNT++))
+    exit 1
 else
     echo -e "${GREEN}PASS${NC}: Container not running as root"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 fi
+echo
+
+# Test 8: Airlock Permission Validation
+echo "=== Test 8: Airlock Permission Validation ==="
+echo "Verify agent can write to airlocked config volumes"
+
+TEST_VOL="abox-airlock-perm-$(date +%s)"
+$CONTAINER_CMD volume create "$TEST_VOL" > /dev/null
+
+$CONTAINER_CMD run --rm \
+    -v "$TEST_VOL:/dest" \
+    alpine sh -c "touch /dest/test_config && chown $HOST_UID:$HOST_GID /dest/test_config"
+
+if $CONTAINER_CMD run --rm \
+    -e HOST_UID=$HOST_UID \
+    -e HOST_GID=$HOST_GID \
+    -v "$TEST_VOL:/config" \
+    $IMAGE_NAME bash -c "echo 'success' > /config/test_config" 2>/dev/null; then
+    echo -e "${GREEN}PASS${NC}: Agent can write to airlocked volume"
+    PASS_COUNT=$((PASS_COUNT + 1))
+else
+    echo -e "${RED}FAIL${NC}: Agent CANNOT write to airlocked volume"
+    $CONTAINER_CMD volume rm "$TEST_VOL" > /dev/null 2>&1
+    exit 1
+fi
+$CONTAINER_CMD volume rm "$TEST_VOL" > /dev/null 2>&1 || true
 echo
 
 # Summary
@@ -244,13 +284,6 @@ echo "=========================================="
 echo "Test Summary"
 echo "=========================================="
 echo -e "Passed: ${GREEN}$PASS_COUNT${NC}"
-echo -e "Failed: ${RED}$FAIL_COUNT${NC}"
 echo
-
-if [ $FAIL_COUNT -eq 0 ]; then
-    echo -e "${GREEN}All tests passed!${NC}"
-    exit 0
-else
-    echo -e "${RED}Some tests failed.${NC}"
-    exit 1
-fi
+echo -e "${GREEN}All tests passed!${NC}"
+exit 0

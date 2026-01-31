@@ -25,11 +25,6 @@ Navigate to your project directory and run:
 abx
 ```
 
-To see the version:
-```bash
-abx --version
-```
-
 ## Configuration
 
 ABox looks for configuration and keys in `~/.config/opencode`. These are safely mounted into the sandbox as needed.

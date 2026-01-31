@@ -2,6 +2,9 @@ FROM debian:bookworm-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
 
+# Use pipefail to ensure build fails if curl fails in a pipe
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # 1. Install Runtime Dependencies & Developer Tools
 RUN apt-get update && apt-get install -y \
     curl git unzip build-essential \

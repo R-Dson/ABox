@@ -73,4 +73,4 @@ if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
 fi
 
 echo ""
-echo "Run 'abx --version' to verify."
+echo "Run 'abx' to start."

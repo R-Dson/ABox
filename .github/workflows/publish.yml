@@ -51,22 +51,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
 
-      - name: Prepare ABox CLI Version
-        run: |
-          # Get version from tag or sha
-          VERSION=${{ steps.meta.outputs.version }}
-          if [ -z "$VERSION" ]; then VERSION=${{ github.sha }}; fi
-          
-          # Update VERSION in binary
-          sed -i "s/VERSION=\".*\"/VERSION=\"$VERSION\"/" bin/abx
-          
-          # If this is a tag push, update IMAGE_NAME to point to GHCR
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            FULL_IMAGE_NAME="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$VERSION"
-            sed -i "s|IMAGE_NAME=\".*\"|IMAGE_NAME=\"$FULL_IMAGE_NAME\"|" bin/abx
-            echo "Updated IMAGE_NAME to $FULL_IMAGE_NAME"
-          fi
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
