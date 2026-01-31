@@ -1,6 +1,6 @@
 #!/bin/bash
 
-IMAGE_NAME="abox:latest"
+IMAGE_NAME="ghcr.io/r-dson/abox:main"
 VERSION="1.0.0" # Managed by build process
 
 # 0. Version & Runtime Detection

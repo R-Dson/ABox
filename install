@@ -18,17 +18,15 @@ if ! command -v curl >/dev/null 2>&1; then
 fi
 
 # Ask for installation type
-echo "Where would you like to install ABox?"
-echo "1) System-wide (/usr/local/bin) - Requires sudo"
-echo "2) User-local (~/.local/bin)    - No sudo needed"
-read -rp "Select an option [1-2]: " choice
+read -rp "Install system-wide (/usr/local/bin)? [Y/n]: " choice
+choice=${choice:-Y}
 
 case $choice in
-    1)
+    [Yy]*)
         INSTALL_DIR="/usr/local/bin"
         USE_SUDO=true
         ;;
-    2)
+    [Nn]*)
         INSTALL_DIR="$HOME/.local/bin"
         USE_SUDO=false
         mkdir -p "$INSTALL_DIR"

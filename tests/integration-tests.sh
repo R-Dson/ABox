@@ -22,9 +22,12 @@ if command -v docker &> /dev/null; then
     fi
 fi
 
+IMAGE_NAME=${IMAGE_NAME:-"$IMAGE_NAME"}
+
 echo "=========================================="
 echo "ABox Integration Tests"
 echo "Using: $CONTAINER_CMD"
+echo "Image: $IMAGE_NAME"
 echo "=========================================="
 echo
 
@@ -76,7 +79,7 @@ echo "Verify container runs with same UID/GID as host"
 TEST_OUTPUT=$($CONTAINER_CMD run --rm \
     -e HOST_UID=$HOST_UID \
     -e HOST_GID=$HOST_GID \
-    abox:latest id 2>/dev/null || echo "failed")
+    $IMAGE_NAME id 2>/dev/null || echo "failed")
 
 if echo "$TEST_OUTPUT" | grep -q "uid=$HOST_UID(agent)"; then
     echo -e "${GREEN}PASS${NC}: Container UID matches host ($HOST_UID)"
@@ -96,7 +99,7 @@ if $CONTAINER_CMD run --rm \
     -e HOST_UID=$HOST_UID \
     -e HOST_GID=$HOST_GID \
     -v "$PWD:/workspace" \
-    abox:latest ls "$HOST_HOME/.ssh" 2>/dev/null; then
+    $IMAGE_NAME ls "$HOST_HOME/.ssh" 2>/dev/null; then
     echo -e "${RED}FAIL${NC}: Container should NOT be able to access host ~/.ssh"
     ((FAIL_COUNT++))
 else
@@ -117,14 +120,14 @@ $CONTAINER_CMD run --rm \
     -e HOST_UID=$HOST_UID \
     -e HOST_GID=$HOST_GID \
     -v "abox-test-persist:/home/agent/.local/share/opencode" \
-    abox:latest bash -c "touch /home/agent/.local/share/opencode/test-marker.txt" 2>/dev/null
+    $IMAGE_NAME bash -c "touch /home/agent/.local/share/opencode/test-marker.txt" 2>/dev/null
 
 # Second session: check if file exists
 if $CONTAINER_CMD run --rm \
     -e HOST_UID=$HOST_UID \
     -e HOST_GID=$HOST_GID \
     -v "abox-test-persist:/home/agent/.local/share/opencode" \
-    abox:latest bash -c "test -f /home/agent/.local/share/opencode/test-marker.txt" 2>/dev/null; then
+    $IMAGE_NAME bash -c "test -f /home/agent/.local/share/opencode/test-marker.txt" 2>/dev/null; then
     echo -e "${GREEN}PASS${NC}: Files persist across sessions"
     ((PASS_COUNT++))
 
@@ -133,7 +136,7 @@ if $CONTAINER_CMD run --rm \
         -e HOST_UID=$HOST_UID \
         -e HOST_GID=$HOST_GID \
         -v "abox-test-persist:/home/agent/.local/share/opencode" \
-        abox:latest bash -c "rm /home/agent/.local/share/opencode/test-marker.txt" 2>/dev/null
+        $IMAGE_NAME bash -c "rm /home/agent/.local/share/opencode/test-marker.txt" 2>/dev/null
 else
     echo -e "${RED}FAIL${NC}: Files did not persist"
     ((FAIL_COUNT++))
@@ -184,7 +187,7 @@ $CONTAINER_CMD run --rm \
     -e HOST_UID=$HOST_UID \
     -e HOST_GID=$HOST_GID \
     -v "$TEST_DIR:/workspace" \
-    abox:latest touch /workspace/test-file 2>/dev/null
+    $IMAGE_NAME touch /workspace/test-file 2>/dev/null
 
 # Check ownership on host
 if [ -f "$TEST_DIR/test-file" ]; then
@@ -213,7 +216,7 @@ echo "Verify sudo is not available inside container"
 if $CONTAINER_CMD run --rm \
     -e HOST_UID=$HOST_UID \
     -e HOST_GID=$HOST_GID \
-    abox:latest which sudo 2>/dev/null; then
+    $IMAGE_NAME which sudo 2>/dev/null; then
     echo -e "${RED}FAIL${NC}: sudo should NOT be available"
     ((FAIL_COUNT++))
 else
@@ -225,7 +228,7 @@ fi
 TEST_OUTPUT=$($CONTAINER_CMD run --rm \
     -e HOST_UID=$HOST_UID \
     -e HOST_GID=$HOST_GID \
-    abox:latest id 2>/dev/null || echo "failed")
+    $IMAGE_NAME id 2>/dev/null || echo "failed")
 
 if echo "$TEST_OUTPUT" | grep -q "uid=0"; then
     echo -e "${RED}FAIL${NC}: Container should NOT run as root"

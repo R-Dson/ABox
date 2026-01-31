@@ -53,7 +53,7 @@ for i in $(seq 1 $RUNS); do
     $CONTAINER_CMD run --rm \
         -e HOST_UID=$(id -u) \
         -e HOST_GID=$(id -g) \
-        abox:latest echo "ready" > /dev/null 2>&1
+        $IMAGE_NAME echo "ready" > /dev/null 2>&1
     END_TIME=$(date +%s%N)
 
     ELAPSED=$((($END_TIME - $START_TIME) / 1000000))
@@ -97,7 +97,7 @@ else
         -e HOST_UID=$(id -u) \
         -e HOST_GID=$(id -g) \
         -v "$TEST_DIR:/workspace" \
-        abox:latest bash -c "
+        $IMAGE_NAME bash -c "
             touch /workspace/test-file
             echo 'test' > /workspace/test-file
             # Try to touch home directory (should fail)
@@ -181,7 +181,7 @@ for tool in "${TOOLS[@]}"; do
     if $CONTAINER_CMD run --rm \
         -e HOST_UID=$(id -u) \
         -e HOST_GID=$(id -g) \
-        abox:latest which "$tool" > /dev/null 2>&1; then
+        $IMAGE_NAME which "$tool" > /dev/null 2>&1; then
         echo -e "  ${GREEN}✓${NC} $tool available"
         ((TOOLS_AVAILABLE++))
     else
@@ -219,7 +219,7 @@ else
         -e HOST_UID=$(id -u) \
         -e HOST_GID=$(id -g) \
         -v "$TEST_DIR:/workspace" \
-        abox:latest bash -c "
+        $IMAGE_NAME bash -c "
             echo 'Agent was here' > /workspace/agent-output.txt
             mkdir -p /workspace/.agent
             date > /workspace/.agent/session-info.txt
