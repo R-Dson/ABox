@@ -37,8 +37,18 @@ HOST_SHARE_DIR="$HOME/.local/share/opencode"
 HOST_UID=${HOST_UID:-$(id -u)}
 HOST_GID=${HOST_GID:-$(id -g)}
 
-# 1. Safety Check
-if [[ "$PWD" == "$HOME" ]]; then
+# Path Resolution
+TARGET_DIR="."
+if [[ $# -gt 0 ]] && [[ -d "$1" ]]; then
+    TARGET_DIR="$1"
+    shift
+fi
+
+# Resolve to absolute path
+TARGET_DIR=$(cd "$TARGET_DIR" && pwd)
+
+# Safety Check
+if [[ "$TARGET_DIR" == "$HOME" ]]; then
     echo "ERROR: Do not run ABox in your HOME directory."
     exit 1
 fi
@@ -46,7 +56,7 @@ fi
 # Block sensitive system directories
 FORBIDDEN_DIRS=("/" "/usr" "/bin" "/sbin" "/etc" "/var" "/boot" "/dev" "/proc" "/sys" "/run" "/tmp")
 for dir in "${FORBIDDEN_DIRS[@]}"; do
-    if [[ "$PWD" == "$dir" ]] || [[ "$PWD" == "$dir/"* ]]; then
+    if [[ "$TARGET_DIR" == "$dir" ]] || [[ "$TARGET_DIR" == "$dir/"* ]]; then
         echo "ERROR: Running ABox in sensitive system directory '$dir' is not allowed."
         exit 1
     fi
@@ -94,7 +104,7 @@ if [[ -t 0 ]]; then
 fi
 
 $CONTAINER_RUNTIME run --rm $INTERACTIVE_FLAGS \
-    --name "abox-$(basename "$PWD")" \
+    --name "abox-$(basename "$TARGET_DIR")" \
     --hostname abx \
     -e HOST_UID="$HOST_UID" \
     -e HOST_GID="$HOST_GID" \
@@ -103,7 +113,7 @@ $CONTAINER_RUNTIME run --rm $INTERACTIVE_FLAGS \
     --cap-add=SETUID \
     --cap-add=SETGID \
     --cap-add=DAC_OVERRIDE \
-    -v "$(pwd):/workspace" \
+    -v "$TARGET_DIR:/workspace" \
     -v "$AUTH_VOL:/home/agent/.config/opencode" \
     -v "$AUTH_VOL:/home/agent/.opencode" \
     -v "$SHARE_VOL:/home/agent/.local/share/opencode" \
