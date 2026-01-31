@@ -43,6 +43,15 @@ if [[ "$PWD" == "$HOME" ]]; then
     exit 1
 fi
 
+# Block sensitive system directories
+FORBIDDEN_DIRS=("/" "/usr" "/bin" "/sbin" "/etc" "/var" "/boot" "/dev" "/proc" "/sys" "/run" "/tmp")
+for dir in "${FORBIDDEN_DIRS[@]}"; do
+    if [[ "$PWD" == "$dir" ]] || [[ "$PWD" == "$dir/"* ]]; then
+        echo "ERROR: Running ABox in sensitive system directory '$dir' is not allowed."
+        exit 1
+    fi
+done
+
 if [[ ! -d "$HOST_CONFIG_DIR" ]]; then
     # echo "WARNING: Host config directory $HOST_CONFIG_DIR does not exist."
     # echo "Creating it now..."
