@@ -18,7 +18,13 @@ if ! command -v curl >/dev/null 2>&1; then
 fi
 
 # Ask for installation type
-read -rp "Install system-wide (/usr/local/bin)? [Y/n]: " choice
+if [ -t 0 ] || [ -c /dev/tty ]; then
+    # Redirect stdin to tty to allow pipe-based installation (curl | bash)
+    # Using || true to handle cases where /dev/tty exists but cannot be opened
+    read -rp "Install system-wide (/usr/local/bin)? [Y/n]: " choice < /dev/tty || choice="Y"
+else
+    choice="Y"
+fi
 choice=${choice:-Y}
 
 case $choice in
