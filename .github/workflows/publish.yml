@@ -20,6 +20,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Read OpenCode version
+        id: opencode_version
+        run: |
+          VERSION=$(cat OPENCODE_VERSION | tr -d '[:space:]')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building with OpenCode version: $VERSION"
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -58,6 +64,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            OPENCODE_VERSION=${{ steps.opencode_version.outputs.version }}
       - name: Create/Update GitHub Release
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v1

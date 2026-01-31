@@ -10,8 +10,12 @@ test: build
 	@echo "Running UX Verification..."
 	IMAGE_NAME=$(IMAGE_TAG) ./tests/ux-verification.sh
 
+OPENCODE_VERSION ?= $(shell cat OPENCODE_VERSION 2>/dev/null || echo "")
+
 build:
-	$(CONTAINER_RUNTIME) build -t $(IMAGE_TAG) -f docker/Dockerfile docker/
+	$(CONTAINER_RUNTIME) build -t $(IMAGE_TAG) -f docker/Dockerfile \
+		$(if $(OPENCODE_VERSION),--build-arg OPENCODE_VERSION=$(OPENCODE_VERSION),) \
+		docker/
 
 install: build
 	sudo cp bin/abx /usr/local/bin/abx

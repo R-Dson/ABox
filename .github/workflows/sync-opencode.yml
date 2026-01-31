@@ -1,0 +1,64 @@
+name: Sync OpenCode Version
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # Run every 5 minutes
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get current OpenCode version
+        id: current
+        run: |
+          CURRENT_VERSION=$(cat OPENCODE_VERSION | tr -d '[:space:]')
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Check for latest OpenCode release
+        id: upstream
+        run: |
+          LATEST_VERSION=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r .tag_name)
+          echo "latest=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          echo "Latest upstream version: $LATEST_VERSION"
+
+      - name: Update version file if needed
+        id: update
+        run: |
+          CURRENT="${{ steps.current.outputs.current }}"
+          LATEST="${{ steps.upstream.outputs.latest }}"
+
+          if [ "$CURRENT" != "$LATEST" ]; then
+            echo "New version detected: $LATEST (current: $CURRENT)"
+            echo "$LATEST" > OPENCODE_VERSION
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+            echo "version=$LATEST" >> $GITHUB_OUTPUT
+          else
+            echo "Already up to date with version $CURRENT"
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push version update
+        if: steps.update.outputs.needs_update == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add OPENCODE_VERSION
+          git commit -m "chore: bump opencode to ${{ steps.update.outputs.version }}"
+          git push
+
+      - name: Trigger build workflow
+        if: steps.update.outputs.needs_update == 'true'
+        run: |
+          gh workflow run publish.yml --ref main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

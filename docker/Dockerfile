@@ -1,6 +1,7 @@
 FROM debian:bookworm-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG OPENCODE_VERSION
 
 # Use pipefail to ensure build fails if curl fails in a pipe
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -20,7 +21,11 @@ RUN groupadd -g 1000 agent && \
     useradd -u 1000 -g agent -m -s /bin/bash agent
 
 # 3. Install OpenCode and make it system-wide
-RUN curl -fsSL https://opencode.ai/install | bash \
+RUN if [ -n "$OPENCODE_VERSION" ]; then \
+        curl -fsSL https://opencode.ai/install | bash -s -- --version "$OPENCODE_VERSION"; \
+    else \
+        curl -fsSL https://opencode.ai/install | bash; \
+    fi \
     && mv /root/.opencode/bin/opencode /usr/local/bin/opencode \
     && rm -rf /root/.opencode
 
