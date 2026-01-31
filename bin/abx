@@ -103,4 +103,4 @@ $CONTAINER_RUNTIME run --rm $INTERACTIVE_FLAGS \
     -v "$AUTH_VOL:/home/agent/.opencode" \
     -v "$SHARE_VOL:/home/agent/.local/share/opencode" \
     -v "abox-state:/home/agent/.local/state/opencode" \
-    "$IMAGE_NAME" "$@"
+    "$IMAGE_NAME" opencode "$@"
