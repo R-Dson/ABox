@@ -1,0 +1,98 @@
+#!/bin/bash
+
+IMAGE_NAME="abox:latest"
+VERSION="1.0.0" # Managed by build process
+
+# 0. Version & Runtime Detection
+if [[ "$1" == "--version" ]]; then
+    echo "ABox version $VERSION"
+    exit 0
+fi
+
+detect_runtime() {
+    # Check for explicit override
+    if [[ -n "$ABOX_RUNTIME" ]]; then
+        if command -v "$ABOX_RUNTIME" >/dev/null 2>&1 && "$ABOX_RUNTIME" info >/dev/null 2>&1; then
+            echo "$ABOX_RUNTIME"
+            return 0
+        fi
+        echo "ERROR: Specified runtime '$ABOX_RUNTIME' is not available or healthy." >&2
+        return 1
+    fi
+
+    # Prefer Docker
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+        echo "docker"
+        return 0
+    fi
+
+    # Fallback to Podman
+    if command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then
+        echo "podman"
+        return 0
+    fi
+
+    echo "ERROR: No healthy container runtime found (Docker or Podman)." >&2
+    echo "Ensure your container engine is running and accessible." >&2
+    return 1
+}
+
+CONTAINER_RUNTIME=$(detect_runtime) || exit 1
+HOST_CONFIG_DIR="$HOME/.config/opencode"
+HOST_UID=${HOST_UID:-$(id -u)}
+HOST_GID=${HOST_GID:-$(id -g)}
+
+# 1. Safety Check
+if [[ "$PWD" == "$HOME" ]]; then
+    echo "ERROR: Do not run ABox in your HOME directory."
+    exit 1
+fi
+
+if [[ ! -d "$HOST_CONFIG_DIR" ]]; then
+    echo "⚠️  WARNING: Host config directory $HOST_CONFIG_DIR does not exist."
+    echo "Creating it now..."
+    mkdir -p "$HOST_CONFIG_DIR"
+fi
+
+# 2. Ephemeral Auth Volume Setup
+AUTH_VOL="abox-auth-$(date +%s)"
+$CONTAINER_RUNTIME volume create "$AUTH_VOL" > /dev/null
+
+cleanup() {
+    $CONTAINER_RUNTIME volume rm "$AUTH_VOL" > /dev/null 2>&1
+}
+trap cleanup EXIT
+
+# 3. Copy Auth Keys to Airlock (Permission Normalization)
+if [[ -z "$(ls -A "$HOST_CONFIG_DIR" 2>/dev/null)" ]]; then
+    echo "⚠️  WARNING: Host config directory $HOST_CONFIG_DIR is empty."
+fi
+
+# We use :ro,z to handle SELinux on systems like Fedora/Bazzite
+$CONTAINER_RUNTIME run --rm \
+    -v "$HOST_CONFIG_DIR:/source:ro,z" \
+    -v "$AUTH_VOL:/dest" \
+    alpine sh -c "cp -r /source/. /dest/ && chmod -R u+rwX /dest && chown -R $HOST_UID:$HOST_GID /dest"
+
+# 4. Launch Sandbox
+INTERACTIVE_FLAGS="-i"
+if [[ -t 0 ]]; then
+    INTERACTIVE_FLAGS="-it"
+fi
+
+$CONTAINER_RUNTIME run --rm $INTERACTIVE_FLAGS \
+    --name "abox-$(basename "$PWD")" \
+    --hostname abx \
+    -e HOST_UID="$HOST_UID" \
+    -e HOST_GID="$HOST_GID" \
+    --cap-drop=ALL \
+    --cap-add=CHOWN \
+    --cap-add=SETUID \
+    --cap-add=SETGID \
+    --cap-add=DAC_OVERRIDE \
+    -v "$(pwd):/workspace" \
+    -v "$AUTH_VOL:/home/agent/.config/opencode" \
+    -v "$AUTH_VOL:/home/agent/.opencode" \
+    -v "abox-share:/home/agent/.local/share/opencode" \
+    -v "abox-state:/home/agent/.local/state/opencode" \
+    "$IMAGE_NAME" "$@"
