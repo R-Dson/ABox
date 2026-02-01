@@ -9,13 +9,13 @@ editors:
     install: "curl -LsSf https://aider.chat/install.sh | sh"
     cmd: "aider"
   copilot:
-    install: "curl -fsSL https://gh.io/copilot-install | bash"
+    install: "export VERSION=$VERSION && curl -fsSL https://gh.io/copilot-install | bash"
     cmd: "copilot"
   vibe:
     install: "curl -LsSf https://mistral.ai/vibe/install.sh | bash"
     cmd: "vibe"
   goose:
-    install: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash || true"
+    install: "export GOOSE_VERSION=$VERSION && curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash || true"
     cmd: "goose"
   codex:
     install: "npm i -g @openai/codex"

@@ -1,9 +1,9 @@
-aider: v0.86.0
+aider: 0.86.0
 claude: 0.2.29
 codex: 0.0.1
-copilot: v0.0.400
+copilot: 0.0.400
 cursor: 0.0.1
-gemini: v0.26.0
-goose: v1.22.1
-opencode: v1.1.48
-vibe: v2.0.2
+gemini: 0.26.0
+goose: 1.22.1
+opencode: 1.1.48
+vibe: 2.0.2

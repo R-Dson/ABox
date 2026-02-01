@@ -53,10 +53,12 @@ def main():
             latest = get_latest_pypi(identifier)
 
         if latest:
-            print(f"Found {editor}: {latest}")
-            if versions.get(editor) != latest:
-                print(f"Updating {editor}: {versions.get(editor)} -> {latest}")
-                versions[editor] = latest
+            # Clean version string (strip 'v' prefix)
+            clean_version = latest.lstrip('v')
+            print(f"Found {editor}: {clean_version}")
+            if versions.get(editor) != clean_version:
+                print(f"Updating {editor}: {versions.get(editor)} -> {clean_version}")
+                versions[editor] = clean_version
                 updated = True
         else:
             print(f"Could not find latest for {editor}")
