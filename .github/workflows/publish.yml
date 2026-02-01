@@ -55,7 +55,11 @@ jobs:
           [[ "$VERSION" == "null" ]] && VERSION=""
           [[ "$CMD" == "null" ]] && CMD="opencode"
           
-          echo "install=$INSTALL" >> $GITHUB_OUTPUT
+          # Use multi-line output format for strings with special characters (pipes, etc)
+          echo "install<<EOF" >> $GITHUB_OUTPUT
+          echo "$INSTALL" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "cmd=$CMD" >> $GITHUB_OUTPUT
       - name: Set up QEMU
@@ -84,7 +88,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./docker
           file: ./docker/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
