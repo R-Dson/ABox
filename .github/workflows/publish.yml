@@ -3,6 +3,11 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'VERSIONS.yaml'
+      - 'bin/abx'
+      - 'docker/**'
+      - 'Makefile'
     tags:
       - 'v*'
   pull_request:
@@ -10,22 +15,49 @@ on:
       - main
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: r-dson/abox
 jobs:
-  build-and-push:
+  build-binary:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Read OpenCode version
-        id: opencode_version
+      - name: Build binary
+        run: make build
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: abx-binary
+          path: bin/abx
+
+  publish-images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        editor: [opencode, claude, aider, copilot, vibe, goose, codex, gemini, cursor]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Load editor config
+        id: config
         run: |
-          VERSION=$(cat OPENCODE_VERSION | tr -d '[:space:]')
+          EDITOR="${{ matrix.editor }}"
+          INSTALL=$(yq ".editors.$EDITOR.install" docker/editors.yaml)
+          VERSION=$(yq ".$EDITOR" VERSIONS.yaml)
+          CMD=$(yq ".editors.$EDITOR.cmd" docker/editors.yaml)
+          
+          # Handle null/empty values
+          [[ "$INSTALL" == "null" ]] && INSTALL=""
+          [[ "$VERSION" == "null" ]] && VERSION=""
+          [[ "$CMD" == "null" ]] && CMD="opencode"
+          
+          echo "install=$INSTALL" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Building with OpenCode version: $VERSION"
+          echo "cmd=$CMD" >> $GITHUB_OUTPUT
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -42,22 +74,18 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-      - name: Build and Test (Local)
-        run: |
-          make build
-          make test
-        env:
-          ABOX_RUNTIME: docker
+            type=raw,value=${{ matrix.editor }}
+            type=raw,value=${{ matrix.editor }}-${{ steps.config.outputs.version }}
+            type=semver,pattern={{version}},suffix=-${{ matrix.editor }}
+            type=sha,suffix=-${{ matrix.editor }}
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./docker
+          context: .
+          file: ./docker/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -65,9 +93,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            OPENCODE_VERSION=${{ steps.opencode_version.outputs.version }}
+            INSTALL_CMD=${{ steps.config.outputs.install }}
+            VERSION=${{ steps.config.outputs.version }}
+            COMMAND_NAME=${{ steps.config.outputs.cmd }}
+
+  release:
+    needs: [build-binary, publish-images]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: abx-binary
+          path: bin/
       - name: Create/Update GitHub Release
-        if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v1
         with:
           files: bin/abx

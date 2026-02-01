@@ -5,11 +5,12 @@
 ## Features
 
 - **Security First**: Runs in an isolated container with dropped capabilities and path validation.
+- **Multi-Editor Support**: Choose between OpenCode, Claude Code, Aider, Copilot, Goose, and more.
 - **Airlock Pattern**: Ephemeral volumes for auth keys ensure host files remain untouched.
 - **Runtime Agnostic**: Automatically detects and uses Docker or Podman.
 - **Easy Integration**: Seamlessly handles authentication keys and workspace mounting.
-- **Cross-platform**: Works on Linux, macOS (via Docker Desktop), and Windows (via WSL2).
-- **Auto-updates**: Automatically rebuilds with the latest OpenCode version via GitHub Actions.
+- **Cross-platform**: Works on Linux, macOS, and Windows (via WSL2).
+- **Auto-updates**: Automated builds for all supported editors via GitHub Actions.
 
 ## Installation
 
@@ -31,19 +32,42 @@ Or specify a directory:
 abx /path/to/project
 ```
 
-You can also pass additional arguments to opencode:
+### Switching Editors
+
+ABox supports multiple AI editors. Use the `--editor` flag to switch temporarily:
 
 ```bash
-abx --help                    # Show opencode help
-abx /path/to/project --help   # Same thing
-abx --other-opencode-flag    # Pass flags to opencode
+abx --editor claude
+abx --editor codex
+```
+
+Or specify a permanent default editor:
+
+```bash
+abx --default-editor claude
+```
+
+### Passing Arguments
+
+You can pass additional arguments to the underlying editor:
+
+```bash
+abx --help
+abx --other-flag
 ```
 
 ## Configuration
 
-`abx` looks for configuration in `~/.config/opencode` and keys in `~/.local/share/opencode`. These are safely mounted into the sandbox via an ephemeral airlock.
+- **Global Config**: `~/.config/abx.conf` stores your default editor.
+- **Editor Auth**: `abx` maps editor-specific config files or folders (like `~/.claude`, `~/.opencode` or `~/.aider.conf.yml`) safely into the sandbox.
 
 ## Development
+
+Build a specific editor image:
+
+```bash
+make build ABX_EDITOR=claude
+```
 
 Run tests:
 

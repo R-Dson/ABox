@@ -34,9 +34,13 @@ if [ "$(id -u agent)" != "$USER_ID" ]; then
 fi
 
 # Fix ownership of persistent volumes if they changed
-if [ "$(stat -c '%u' /home/agent/.local/share/opencode)" != "$USER_ID" ]; then
+if [ "$(stat -c '%u' /home/agent)" != "$USER_ID" ]; then
     chown -R agent:agent /home/agent
 fi
 
-# Drop root privileges and execute opencode
-exec gosu agent "$@"
+# Drop root privileges and execute the command
+if [ $# -eq 0 ]; then
+    exec gosu agent $DEFAULT_COMMAND
+else
+    exec gosu agent "$@"
+fi

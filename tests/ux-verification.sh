@@ -172,7 +172,7 @@ echo
 
 # Test 4: Command Availability
 echo "=== Test 4: Developer Tools Availability ==="
-echo "Checking essential developer tools..."
+echo "Checking essential developer tools in opencode..."
 
 TOOLS=("python3" "node" "npm" "git" "jq" "rg")
 TOOLS_AVAILABLE=0
@@ -181,7 +181,7 @@ for tool in "${TOOLS[@]}"; do
     if $CONTAINER_CMD run --rm \
         -e HOST_UID=$(id -u) \
         -e HOST_GID=$(id -g) \
-        $IMAGE_NAME which "$tool" > /dev/null 2>&1; then
+        ghcr.io/r-dson/abox:opencode which "$tool" > /dev/null 2>&1; then
         echo -e "  ${GREEN}✓${NC} $tool available"
         ((TOOLS_AVAILABLE++))
     else
@@ -190,11 +190,20 @@ for tool in "${TOOLS[@]}"; do
 done
 
 if [ $TOOLS_AVAILABLE -eq ${#TOOLS[@]} ]; then
-    echo -e "  ${GREEN}PASS${NC}: All developer tools available"
+    echo -e "  ${GREEN}PASS${NC}: All developer tools available in opencode"
     ((PASS_COUNT++))
 else
-    echo -e "  ${YELLOW}WARN${NC}: Some tools missing (${TOOLS_AVAILABLE}/${#TOOLS[@]})"
-    ((PASS_COUNT++))  # Non-critical for now
+    echo -e "  ${YELLOW}WARN${NC}: Some tools missing in opencode (${TOOLS_AVAILABLE}/${#TOOLS[@]})"
+    ((PASS_COUNT++))
+fi
+
+echo "Checking essential developer tools in claude..."
+if $CONTAINER_CMD run --rm ghcr.io/r-dson/abox:claude node --version > /dev/null 2>&1; then
+    echo -e "  ${GREEN}✓${NC} node available in claude"
+    ((PASS_COUNT++))
+else
+    echo -e "  ${RED}✗${NC} node NOT available in claude"
+    ((FAIL_COUNT++))
 fi
 echo
 
