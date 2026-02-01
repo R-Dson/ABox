@@ -125,3 +125,16 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  cleanup-untagged:
+    needs: publish-images
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Clean up untagged images
+        uses: smartsquare/ghcr-clean-untagged-action@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          package_name: abox
