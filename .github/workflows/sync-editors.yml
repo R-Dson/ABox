@@ -21,7 +21,7 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install requests pyyaml
+        run: pip install -r requirements.txt
 
       - name: Sync versions
         run: python scripts/sync_versions.py

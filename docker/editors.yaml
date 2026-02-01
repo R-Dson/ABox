@@ -3,19 +3,19 @@ editors:
     install: "curl -fsSL https://opencode.ai/install | bash -s -- --version $VERSION && mv /root/.opencode/bin/opencode /usr/local/bin/opencode && rm -rf /root/.opencode"
     cmd: "opencode"
   claude:
-    install: "curl -fsSL https://claude.ai/install.sh | bash -s -- $VERSION"
+    install: "curl -fsSL https://claude.ai/install.sh | bash"
     cmd: "claude"
   aider:
     install: "curl -LsSf https://aider.chat/install.sh | sh"
     cmd: "aider"
   copilot:
-    install: "curl -fsSL https://gh.io/copilot-install | VERSION=$VERSION bash"
+    install: "curl -fsSL https://gh.io/copilot-install | bash"
     cmd: "copilot"
   vibe:
     install: "curl -LsSf https://mistral.ai/vibe/install.sh | bash"
     cmd: "vibe"
   goose:
-    install: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | GOOSE_VERSION=$VERSION bash"
+    install: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash || true"
     cmd: "goose"
   codex:
     install: "npm i -g @openai/codex"

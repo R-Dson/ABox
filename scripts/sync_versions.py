@@ -1,3 +1,4 @@
+import os
 import requests
 import yaml
 
@@ -23,15 +24,18 @@ def get_latest_pypi(package):
     return None
 
 def main():
-    with open("VERSIONS.yaml", "r") as f:
-        versions = yaml.safe_load(f)
+    if not os.path.exists("VERSIONS.yaml"):
+        versions = {}
+    else:
+        with open("VERSIONS.yaml", "r") as f:
+            versions = yaml.safe_load(f) or {}
 
     mappings = {
         "opencode": ("github", "anomalyco/opencode"),
         "claude": ("npm", "@anthropic-ai/claude-code"),
         "aider": ("pypi", "aider-chat"),
         "copilot": ("github", "github/copilot-cli"),
-        "vibe": ("npm", "vibe-cli"),
+        "vibe": ("pypi", "mistral-vibe"),
         "goose": ("github", "block/goose"),
         "codex": ("npm", "@openai/codex"),
         "gemini": ("npm", "@google/gemini-cli"),
