@@ -53,8 +53,12 @@ RUN mkdir -p /home/linuxbrew/.linuxbrew && \
 # Add Homebrew to PATH
 ENV PATH="${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:${PATH}"
 
+# Add local bin to PATH for installers
+ENV PATH="/root/.local/bin:${PATH}"
+
 # Run editor-specific installation logic
-RUN VERSION="$VERSION" eval "$INSTALL_CMD"
+RUN VERSION="$VERSION" eval "$INSTALL_CMD" && \
+    if [ -d /root/.local/bin ]; then cp -rn /root/.local/bin/* /usr/local/bin/ || true; fi
 
 
 # Copy generic entrypoint
