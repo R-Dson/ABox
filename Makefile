@@ -24,7 +24,7 @@ build:
 		--build-arg VERSION="$(VERSION)" \
 		--build-arg COMMAND_NAME="$(COMMAND_NAME)" \
 		-f docker/Dockerfile \
-		docker/
+		.
 
 install: build
 	sudo cp bin/abx /usr/local/bin/abx
