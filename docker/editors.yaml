@@ -1,28 +1,28 @@
 editors:
   opencode:
-    install: "curl -fsSL https://opencode.ai/install | bash -s -- --version $VERSION && mv /root/.opencode/bin/opencode /usr/local/bin/opencode && rm -rf /root/.opencode"
+    install: "npm install -g opencode-ai@${VERSION:-latest}"
     cmd: "opencode"
   claude:
-    install: "curl -fsSL https://claude.ai/install.sh | bash && mv /root/.local/bin/claude /usr/local/bin/claude 2>/dev/null || mv /root/bin/claude /usr/local/bin/claude"
+    install: "npm install -g @anthropic-ai/claude-code@${VERSION:-latest}"
     cmd: "claude"
   aider:
-    install: "curl -LsSf https://aider.chat/install.sh | sh && mv /root/.local/bin/aider /usr/local/bin/aider"
+    install: "uv tool install aider-chat@${VERSION:-latest}"
     cmd: "aider"
   copilot:
-    install: "export VERSION=$VERSION PREFIX=/usr/local && curl -fsSL https://gh.io/copilot-install | bash"
+    install: "npm install -g @github/copilot@${VERSION:-latest}"
     cmd: "copilot"
   vibe:
-    install: "curl -LsSf https://mistral.ai/vibe/install.sh | bash && mv /root/.local/bin/vibe /usr/local/bin/vibe"
+    install: "uv tool install mistral-vibe"
     cmd: "vibe"
   goose:
-    install: "export GOOSE_VERSION=$VERSION && curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash && mv /root/.local/bin/goose /usr/local/bin/goose"
+    install: "uv tool install goose-ai"
     cmd: "goose"
   codex:
-    install: "npm i -g @openai/codex"
+    install: "npm i -g @openai/codex@${VERSION:-latest}"
     cmd: "codex"
   gemini:
-    install: "npm install -g @google/gemini-cli"
+    install: "npm install -g @google/gemini-cli@${VERSION:-latest}"
     cmd: "gemini"
   cursor:
-    install: "curl https://cursor.com/install -fsS | bash && mv /root/.local/bin/cursor /usr/local/bin/cursor"
+    install: "curl https://cursor.com/install -fsS | bash && mv /root/.local/bin/agent /usr/local/bin/cursor"
     cmd: "cursor"
