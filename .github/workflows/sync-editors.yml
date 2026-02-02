@@ -2,7 +2,7 @@ name: Sync Editor Versions
 
 on:
   schedule:
-    - cron: '*/10 * * * *'  # Run every 10 minutes
+    - cron: '*/15 * * * *'  # Run every 10 minutes
   workflow_dispatch:
 
 jobs:
