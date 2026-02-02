@@ -133,6 +133,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
+    concurrency:
+      group: cleanup-abox
+      cancel-in-progress: false 
     strategy:
       matrix:
         editor: [opencode, claude, aider, copilot, vibe, goose, codex, gemini, cursor]
