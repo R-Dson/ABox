@@ -141,7 +141,6 @@ jobs:
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          package: abox
           delete-tags: "sha-*-${{ matrix.editor }}"
           keep-n-tagged: 3
           delete-untagged: true
