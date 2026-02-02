@@ -34,12 +34,11 @@ def main():
         "opencode": ("github", "anomalyco/opencode"),
         "claude": ("npm", "@anthropic-ai/claude-code"),
         "aider": ("pypi", "aider-chat"),
-        "copilot": ("github", "github/copilot-cli"),
+        "copilot": ("npm", "@github/copilot"),
         "vibe": ("pypi", "mistral-vibe"),
         "goose": ("github", "block/goose"),
         "codex": ("npm", "@openai/codex"),
         "gemini": ("npm", "@google/gemini-cli"),
-        "cursor": ("npm", "cursor-chat"),
     }
 
     updated = False
@@ -54,7 +53,7 @@ def main():
 
         if latest:
             # Clean version string (strip 'v' prefix)
-            clean_version = latest.lstrip('v')
+            clean_version = latest.lstrip("v")
             print(f"Found {editor}: {clean_version}")
             if versions.get(editor) != clean_version:
                 print(f"Updating {editor}: {versions.get(editor)} -> {clean_version}")

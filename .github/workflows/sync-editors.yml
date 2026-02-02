@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write  # Needed to trigger the publish workflow
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -38,3 +39,11 @@ jobs:
           git add VERSIONS.yaml
           git commit -m "chore: update editor versions"
           git push
+
+      - name: Trigger Build Workflow
+        if: steps.git-check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Triggering build workflow..."
+          gh workflow run publish.yml --ref main

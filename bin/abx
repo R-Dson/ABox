@@ -1,79 +1,147 @@
 #!/bin/bash
 
-# --- Runtime Detection ---
+# ==============================================================================
+# ABox - Agnostic Sandbox Runtime
+# ==============================================================================
+
+set -o pipefail
+
+# --- Configuration & Defaults ---
+ABX_CONF="$HOME/.config/abx.conf"
+HOST_UID=${HOST_UID:-$(id -u)}
+HOST_GID=${HOST_GID:-$(id -g)}
+TIMESTAMP=$(date +%s)
+
+# --- Helper Functions ---
+
+log_error() {
+    echo "ERROR: $*" >&2
+}
+
 detect_runtime() {
-    # Check for explicit override
+    # 1. Check for explicit override
     if [[ -n "$ABOX_RUNTIME" ]]; then
         if command -v "$ABOX_RUNTIME" >/dev/null 2>&1 && "$ABOX_RUNTIME" info >/dev/null 2>&1; then
             echo "$ABOX_RUNTIME"
             return 0
         fi
-        echo "ERROR: Specified runtime '$ABOX_RUNTIME' is not available or healthy." >&2
+        log_error "Specified runtime '$ABOX_RUNTIME' is not available or healthy."
         return 1
     fi
 
-    # Prefer Docker
+    # 2. Prefer Docker
     if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
         echo "docker"
         return 0
     fi
 
-    # Fallback to Podman
+    # 3. Fallback to Podman
     if command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then
         echo "podman"
         return 0
     fi
 
-    echo "ERROR: No healthy container runtime found (Docker or Podman)." >&2
-    echo "Ensure your container engine is running and accessible." >&2
+    log_error "No healthy container runtime found (Docker or Podman)."
+    log_error "Ensure your container engine is running and accessible."
     return 1
 }
 
-# --- Editor Mapping ---
-# Returns: image_tag|binary_command|config_path|env_vars
+# Returns: image_tag|binary_command|config_path|env_vars|legacy_path
 get_editor_info() {
     local editor=$1
     case "$editor" in
-        claude)   echo "ghcr.io/r-dson/abox:claude|claude|.claude|ANTHROPIC_API_KEY" ;;
-        aider)    echo "ghcr.io/r-dson/abox:aider|aider|.aider.conf.yml|OPENAI_API_KEY,ANTHROPIC_API_KEY" ;;
-        copilot)  echo "ghcr.io/r-dson/abox:copilot|copilot|.copilot|GITHUB_TOKEN" ;;
-        vibe)     echo "ghcr.io/r-dson/abox:vibe|vibe|.vibe|" ;;
-        goose)    echo "ghcr.io/r-dson/abox:goose|goose|.config/goose|" ;;
-        codex)    echo "ghcr.io/r-dson/abox:codex|codex|.codex|" ;;
-        gemini)   echo "ghcr.io/r-dson/abox:gemini|gemini|.gemini|GOOGLE_API_KEY" ;;
-        cursor)   echo "ghcr.io/r-dson/abox:cursor|cursor|.cursor|" ;;
-        opencode|*) echo "ghcr.io/r-dson/abox:opencode|opencode|.config/opencode|" ;;
+        claude)   echo "ghcr.io/r-dson/abox:claude|claude|.claude|ANTHROPIC_API_KEY|" ;;
+        aider)    echo "ghcr.io/r-dson/abox:aider|aider|.aider.conf.yml|OPENAI_API_KEY,ANTHROPIC_API_KEY|" ;;
+        copilot)  echo "ghcr.io/r-dson/abox:copilot|copilot|.copilot|GITHUB_TOKEN|" ;;
+        vibe)     echo "ghcr.io/r-dson/abox:vibe|vibe|.vibe||" ;;
+        goose)    echo "ghcr.io/r-dson/abox:goose|goose|.config/goose||" ;;
+        codex)    echo "ghcr.io/r-dson/abox:codex|codex|.codex||" ;;
+        gemini)   echo "ghcr.io/r-dson/abox:gemini|gemini|.gemini|GOOGLE_API_KEY|" ;;
+        cursor)   echo "ghcr.io/r-dson/abox:cursor|cursor|.cursor||" ;;
+        opencode|*) echo "ghcr.io/r-dson/abox:opencode|opencode|.config/opencode||.opencode" ;;
     esac
 }
 
-# --- Argument Parsing ---
+ensure_host_path_exists() {
+    local path="$1"
+    local rel_path="$2"
+
+    if [[ ! -e "$path" ]]; then
+        # Heuristic: check if it looks like a file (has extension)
+        local filename=$(basename "$rel_path")
+        if [[ "$filename" == *.* ]] && { [[ "${filename:0:1}" != "." ]] || [[ "$filename" == *.*.* ]]; }; then
+            mkdir -p "$(dirname "$path")"
+            touch "$path"
+        else
+            mkdir -p "$path"
+        fi
+    fi
+}
+
+# Sync data from Host -> Container Volume
+sync_host_to_vol() {
+    local host_path="$1"
+    local vol_name="$2"
+    local container_path="$3"
+
+    # Skip if host path doesn't exist
+    if [[ ! -e "$host_path" ]]; then return; fi
+    # Skip if it's an empty directory
+    if [[ -d "$host_path" ]] && [[ -z "$(ls -A "$host_path" 2>/dev/null)" ]]; then return; fi
+
+    if [[ -f "$host_path" ]]; then
+        # File: cat content into volume
+        local filename=$(basename "$host_path")
+        cat "$host_path" | $CONTAINER_RUNTIME run --rm -i \
+            -v "$vol_name:$container_path" \
+            alpine sh -c "cat > $container_path/$filename && chown $HOST_UID:$HOST_GID $container_path/$filename"
+    else
+        # Directory: tar extract into volume
+        tar -C "$host_path" -cf - . 2>/dev/null | $CONTAINER_RUNTIME run --rm -i \
+            -v "$vol_name:$container_path" \
+            alpine tar -C "$container_path" -xf - 2>/dev/null || true
+    fi
+}
+
+# Sync data from Container Volume -> Host
+sync_vol_to_host() {
+    local vol_name="$1"
+    local host_path="$2"
+
+    # Handle file vs directory egress
+    if [[ -f "$host_path" ]]; then
+        local filename=$(basename "$host_path")
+        $CONTAINER_RUNTIME run --rm -i \
+            -v "$vol_name:/src" \
+            alpine cat "/src/$filename" > "$host_path" 2>/dev/null || true
+    else
+        $CONTAINER_RUNTIME run --rm -i \
+            -v "$vol_name:/src" \
+            alpine tar -C /src -cf - . 2>/dev/null | tar -C "$host_path" -xf - 2>/dev/null || true
+        chown -R "$HOST_UID:$HOST_GID" "$host_path" 2>/dev/null || true
+    fi
+}
+
+# --- Main Execution ---
+
+# 1. Argument Parsing
 CLI_EDITOR=""
+CLI_SHELL=false
+CLI_IT=false
+CLI_OFFLINE=false
 SET_DEFAULT=""
 POSITIONAL_ARGS=()
-ABX_CONF="$HOME/.config/abx.conf"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --editor)
-            CLI_EDITOR="$2"
-            shift 2
-            ;;
-        --editor=*)
-            CLI_EDITOR="${1#*=}"
-            shift
-            ;;
-        --default-editor)
-            SET_DEFAULT="$2"
-            shift 2
-            ;;
-        --default-editor=*)
-            SET_DEFAULT="${1#*=}"
-            shift
-            ;;
-        *)
-            POSITIONAL_ARGS+=("$1")
-            shift
-            ;;
+        --editor)           CLI_EDITOR="$2"; shift 2 ;;
+        --editor=*)         CLI_EDITOR="${1#*=}"; shift ;;
+        --default-editor)   SET_DEFAULT="$2"; shift 2 ;;
+        --default-editor=*) SET_DEFAULT="${1#*=}"; shift ;;
+        --shell)            CLI_SHELL=true; shift ;;
+        --force-it)         CLI_IT=true; shift ;;
+        --offline)          CLI_OFFLINE=true; shift ;;
+        *)                  POSITIONAL_ARGS+=("$1"); shift ;;
     esac
 done
 
@@ -82,8 +150,8 @@ if [[ -n "$SET_DEFAULT" ]]; then
     mkdir -p "$(dirname "$ABX_CONF")"
     echo "EDITOR=$SET_DEFAULT" > "$ABX_CONF"
     echo "Default editor set to: $SET_DEFAULT"
-    # If no other actions, exit
-    if [[ ${#POSITIONAL_ARGS[@]} -eq 0 && -z "$CLI_EDITOR" ]]; then
+    # Exit if no execution intended
+    if [[ ${#POSITIONAL_ARGS[@]} -eq 0 && -z "$CLI_EDITOR" && "$CLI_SHELL" == "false" && "$CLI_IT" == "false" ]]; then
         exit 0
     fi
 fi
@@ -91,11 +159,7 @@ fi
 # Restore positional args
 set -- "${POSITIONAL_ARGS[@]}"
 
-# --- Priority Resolution Top Down ---
-# --editor flag
-# ABOX_EDITOR environment variable
-# ~/.config/abx.conf
-# Default to opencode
+# 2. Resolution: Editor & Runtime
 EDITOR_NAME="$CLI_EDITOR"
 [[ -z "$EDITOR_NAME" ]] && EDITOR_NAME="$ABOX_EDITOR"
 if [[ -z "$EDITOR_NAME" && -f "$ABX_CONF" ]]; then
@@ -103,15 +167,10 @@ if [[ -z "$EDITOR_NAME" && -f "$ABX_CONF" ]]; then
 fi
 [[ -z "$EDITOR_NAME" ]] && EDITOR_NAME="opencode"
 
-# --- Resolve Editor Info ---
-IFS='|' read -r IMAGE_NAME COMMAND_NAME CONFIG_REL_PATH ENV_VAR_NAMES <<< "$(get_editor_info "$EDITOR_NAME")"
-
-# --- Runtime & Path Setup ---
 CONTAINER_RUNTIME=$(detect_runtime) || exit 1
-HOST_UID=${HOST_UID:-$(id -u)}
-HOST_GID=${HOST_GID:-$(id -g)}
+IFS='|' read -r IMAGE_NAME COMMAND_NAME CONFIG_REL_PATH ENV_VAR_NAMES LEGACY_PATH <<< "$(get_editor_info "$EDITOR_NAME")"
 
-# Target Directory Resolution
+# 3. Path & Environment Setup
 TARGET_DIR="."
 if [[ $# -gt 0 ]] && [[ -d "$1" ]]; then
     TARGET_DIR="$1"
@@ -119,104 +178,80 @@ if [[ $# -gt 0 ]] && [[ -d "$1" ]]; then
 fi
 TARGET_DIR=$(cd "$TARGET_DIR" && pwd)
 
-# Host Paths
 HOST_CONFIG_PATH="$HOME/$CONFIG_REL_PATH"
-HOST_SHARE_PATH="$HOME/.local/share/abox/$EDITOR_NAME"
+HOST_CACHE="$HOME/.cache/$EDITOR_NAME"
+HOST_STATE="$HOME/.local/state/$EDITOR_NAME"
+HOST_SHARE="$HOME/.local/share/$EDITOR_NAME"
 
-# Ensure host paths exist
-if [[ "$CONFIG_REL_PATH" == *.* ]]; then
-    # Likely a file or hidden dir, be careful
-    if [[ "$EDITOR_NAME" == "aider" ]]; then
-        # Aider uses a file, don't create it as a directory
-        mkdir -p "$(dirname "$HOST_CONFIG_PATH")"
-        touch "$HOST_CONFIG_PATH"
-    else
-        mkdir -p "$HOST_CONFIG_PATH"
-    fi
-else
-    mkdir -p "$HOST_CONFIG_PATH"
-fi
-mkdir -p "$HOST_SHARE_PATH"
+ensure_host_path_exists "$HOST_CONFIG_PATH" "$CONFIG_REL_PATH"
+mkdir -p "$HOST_CACHE" "$HOST_STATE" "$HOST_SHARE"
 
-# --- Ephemeral Volume Setup (Airlock) ---
-AUTH_VOL="abox-auth-$(date +%s)"
-SHARE_VOL="abox-share-$(date +%s)"
-$CONTAINER_RUNTIME volume create "$AUTH_VOL" > /dev/null
-$CONTAINER_RUNTIME volume create "$SHARE_VOL" > /dev/null
+# 4. Volume Lifecycle
+VOL_ID="$EDITOR_NAME-$TIMESTAMP"
+CONFIG_VOL="abox-config-$VOL_ID"
+CACHE_VOL="abox-cache-$VOL_ID"
+STATE_VOL="abox-state-$VOL_ID"
+SHARE_VOL="abox-share-$VOL_ID"
+
+for vol in "$CONFIG_VOL" "$CACHE_VOL" "$STATE_VOL" "$SHARE_VOL"; do
+    $CONTAINER_RUNTIME volume create "$vol" > /dev/null 2>&1
+done
 
 cleanup() {
-    $CONTAINER_RUNTIME volume rm "$AUTH_VOL" "$SHARE_VOL" > /dev/null 2>&1
+    $CONTAINER_RUNTIME volume rm "$CONFIG_VOL" "$CACHE_VOL" "$STATE_VOL" "$SHARE_VOL" > /dev/null 2>&1
 }
 trap cleanup EXIT
 
-# Airlock Copy Logic
-AIRLOCK_CP_CONFIG="cp -r /config_src/. /config_dest/"
-if [[ -f "$HOST_CONFIG_PATH" ]]; then
-    AIRLOCK_CP_CONFIG="cp /config_src /config_dest/$(basename "$CONFIG_REL_PATH")"
-fi
-
+# Initialize Volume Ownership
 $CONTAINER_RUNTIME run --rm \
-    -v "$HOST_CONFIG_PATH:/config_src:ro,z" \
-    -v "$HOST_SHARE_PATH:/share_src:ro,z" \
-    -v "$AUTH_VOL:/config_dest" \
-    -v "$SHARE_VOL:/share_dest" \
-    alpine sh -c "
-        $AIRLOCK_CP_CONFIG && 
-        cp -r /share_src/. /share_dest/ && 
-        chmod -R u+rwX /config_dest /share_dest && 
-        chown -R $HOST_UID:$HOST_GID /config_dest /share_dest
-    "
+    -v "$CONFIG_VOL:/config" \
+    -v "$CACHE_VOL:/cache" \
+    -v "$STATE_VOL:/state" \
+    -v "$SHARE_VOL:/share" \
+    alpine sh -c "chown -R $HOST_UID:$HOST_GID /config /cache /state /share"
 
-# --- 8. Launch Sandbox ---
-# Interactive Flags
+# 5. Sync In (Host -> Container)
+echo "Syncing data to sandbox..."
+( sync_host_to_vol "$HOST_CONFIG_PATH" "$CONFIG_VOL" "/config" ) &
+( sync_host_to_vol "$HOST_CACHE"       "$CACHE_VOL"  "/cache" ) &
+( sync_host_to_vol "$HOST_STATE"       "$STATE_VOL"  "/state" ) &
+( sync_host_to_vol "$HOST_SHARE"       "$SHARE_VOL"  "/share" ) &
+wait
+
+# 6. Prepare & Execute Container
 INTERACTIVE_FLAGS="-i"
-if [[ -t 0 ]] || [[ "$EDITOR_NAME" == "claude" ]] || [[ "$EDITOR_NAME" == "aider" ]]; then
-    INTERACTIVE_FLAGS="-it"
-fi
+[[ -t 0 || "$CLI_SHELL" == "true" || "$CLI_IT" == "true" ]] && INTERACTIVE_FLAGS="-it"
 
-# Map Environment Variables
+EXEC_CMD="$COMMAND_NAME"
+[[ "$CLI_SHELL" == "true" ]] && EXEC_CMD="bash"
+
+# Build Env Args
 ENV_FLAGS=""
 IFS=',' read -ra ADDR <<< "$ENV_VAR_NAMES"
 for env_var in "${ADDR[@]}"; do
-    if [[ -n "${!env_var}" ]]; then
-        ENV_FLAGS="$ENV_FLAGS -e $env_var"
-    fi
+    [[ -n "${!env_var}" ]] && ENV_FLAGS="$ENV_FLAGS -e $env_var"
 done
 
-# Resolve Guest Config Mounts
+# Build Mount Args
 GUEST_CONFIG_PATH="/home/agent/$CONFIG_REL_PATH"
-GUEST_SHARE_PATH="/home/agent/.local/share/$EDITOR_NAME"
+CONFIG_MOUNTS="-v $CONFIG_VOL:$GUEST_CONFIG_PATH"
+[[ -n "$LEGACY_PATH" ]] && CONFIG_MOUNTS="$CONFIG_MOUNTS -v $CONFIG_VOL:/home/agent/$LEGACY_PATH"
+CONFIG_MOUNTS="$CONFIG_MOUNTS -v $CACHE_VOL:/home/agent/.cache/$EDITOR_NAME"
+CONFIG_MOUNTS="$CONFIG_MOUNTS -v $STATE_VOL:/home/agent/.local/state/$EDITOR_NAME"
+CONFIG_MOUNTS="$CONFIG_MOUNTS -v $SHARE_VOL:/home/agent/.local/share/$EDITOR_NAME"
 
-if [[ "$EDITOR_NAME" == "opencode" ]]; then
-    # Backward compatibility/spec for opencode
-    CONFIG_MOUNTS="-v $AUTH_VOL:/home/agent/.config/opencode -v $AUTH_VOL:/home/agent/.opencode"
-    
-    # Add Global Claude-compatible skills volume
-    if [[ -d "$HOME/.claude" ]]; then
-        CONFIG_MOUNTS="$CONFIG_MOUNTS -v $HOME/.claude:/home/agent/.claude:ro,z"
-    fi
-
-    GUEST_SHARE_PATH="/home/agent/.local/share/opencode"
-    STATE_MOUNT="-v abox-state:/home/agent/.local/state/opencode"
-else
-    if [[ -f "$HOST_CONFIG_PATH" ]]; then
-        # If it's a file, mount it to a subfolder and use env var if possible
-        GUEST_AUTH_DIR="/home/agent/.config/abox/auth/$EDITOR_NAME"
-        CONFIG_MOUNTS="-v $AUTH_VOL:$GUEST_AUTH_DIR"
-        case "$EDITOR_NAME" in
-            aider) ENV_FLAGS="$ENV_FLAGS -e AIDER_CONFIG=$GUEST_AUTH_DIR/$(basename "$CONFIG_REL_PATH")" ;;
-        esac
-    else
-        CONFIG_MOUNTS="-v $AUTH_VOL:$GUEST_CONFIG_PATH"
-    fi
-    STATE_MOUNT="-v abox-state-$EDITOR_NAME:/home/agent/.local/state/$EDITOR_NAME"
-fi
-
-# Shared Persistent Homebrew volume
+# Global/Shared Mounts
+[[ -d "$HOME/.claude" ]] && CONFIG_MOUNTS="$CONFIG_MOUNTS -v $HOME/.claude:/home/agent/.claude:ro,z"
 CONFIG_MOUNTS="$CONFIG_MOUNTS -v abox-brew:/home/linuxbrew/.linuxbrew"
 
+# Determine Pull Policy
+PULL_POLICY="always"
+[[ "$CLI_OFFLINE" == "true" ]] && PULL_POLICY="missing"
+
+# Run
 $CONTAINER_RUNTIME run --rm $INTERACTIVE_FLAGS \
-    --name "abox-$EDITOR_NAME-$(basename "$TARGET_DIR")" \
+    --pull "$PULL_POLICY" \
+    --name "abox-$EDITOR_NAME-$(basename "$TARGET_DIR")-$TIMESTAMP" \
     --hostname abx \
     -e HOST_UID="$HOST_UID" \
     -e HOST_GID="$HOST_GID" \
@@ -228,6 +263,16 @@ $CONTAINER_RUNTIME run --rm $INTERACTIVE_FLAGS \
     --cap-add=DAC_OVERRIDE \
     -v "$TARGET_DIR:/workspace" \
     $CONFIG_MOUNTS \
-    -v "$SHARE_VOL:$GUEST_SHARE_PATH" \
-    $STATE_MOUNT \
-    "$IMAGE_NAME" "$COMMAND_NAME" "$@"
+    "$IMAGE_NAME" "$EXEC_CMD" "$@"
+EXIT_CODE=$?
+
+# 7. Sync Out (Container -> Host)
+echo "Syncing changes back to host..."
+( sync_vol_to_host "$CONFIG_VOL" "$HOST_CONFIG_PATH" ) &
+( sync_vol_to_host "$CACHE_VOL"  "$HOST_CACHE" ) &
+( sync_vol_to_host "$STATE_VOL"  "$HOST_STATE" ) &
+( sync_vol_to_host "$SHARE_VOL"  "$HOST_SHARE" ) &
+wait
+
+
+exit $EXIT_CODE

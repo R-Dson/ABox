@@ -5,12 +5,28 @@
 ## Features
 
 - **Security First**: Runs in an isolated container with dropped capabilities and path validation.
+- **Airlock Pattern**: Ephemeral volumes ensure host files remain untouched - editors cannot directly modify your filesystem.
 - **Multi-Editor Support**: Choose between OpenCode, Claude Code, Aider, Copilot, Goose, and more.
-- **Airlock Pattern**: Ephemeral volumes for auth keys ensure host files remain untouched.
 - **Runtime Agnostic**: Automatically detects and uses Docker or Podman.
 - **Easy Integration**: Seamlessly handles authentication keys and workspace mounting.
 - **Cross-platform**: Works on Linux, macOS, and Windows (via WSL2).
 - **Auto-updates**: Automated builds for all supported editors via GitHub Actions.
+
+## Supported Editors
+
+- **OpenCode** (`opencode`) - Default
+- **Claude Code** (`claude`)
+- **Aider** (`aider`)
+- **GitHub Copilot** (`copilot`)
+- **Goose** (`goose`)
+- **Gemini** (`gemini`)
+- **Codex** (`codex`)
+- **Cursor** (`cursor`)
+- **Mistral Vibe** (`vibe`)
+
+## Prerequisites
+
+ABox requires Docker or Podman to be installed and running.
 
 ## Installation
 
@@ -32,6 +48,16 @@ Or specify a directory:
 abx /path/to/project
 ```
 
+### Command-Line Options
+
+- `--editor <name>` - Use specified editor for this session only (overrides default)
+- `--default-editor <name>` - Set editor as the permanent default
+- `--shell` - Enters into the container's bash shell instead of running the editor
+- `--force-it` - Force interactive terminal mode (allocates pseudo-TTY)
+- `--offline` - Disable remote image update checks (uses local image if available)
+- `<directory>` - Specify workspace directory (default: current directory)
+- `<args>...` - Additional arguments are passed directly to the editor
+
 ### Switching Editors
 
 ABox supports multiple AI editors. Use the `--editor` flag to switch temporarily:
@@ -47,19 +73,18 @@ Or specify a permanent default editor:
 abx --default-editor claude
 ```
 
-### Passing Arguments
-
-You can pass additional arguments to the underlying editor:
-
-```bash
-abx --help
-abx --other-flag
-```
 
 ## Configuration
 
 - **Global Config**: `~/.config/abx.conf` stores your default editor.
-- **Editor Auth**: `abx` maps editor-specific config files or folders (like `~/.claude`, `~/.opencode` or `~/.aider.conf.yml`) safely into the sandbox.
+- **Bidirectional Sync**: All editor-specific directories (config, cache, state, and share) are synchronized using ephemeral volumes:
+  - Config: `~/.config/*`, `~/.claude`, `~/.opencode`, etc.
+  - Cache: `~/.cache/*`
+  - State: `~/.local/state/*`
+  - Share: `~/.local/share/*`
+  - Data is copied from host before running and back to host after completion
+  - Editors cannot directly modify host files for security
+- **Workspace**: Your current directory is **mounted** at `/workspace` inside the container with **read-write access**.
 
 ## Development
 
