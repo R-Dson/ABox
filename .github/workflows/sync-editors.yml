@@ -31,6 +31,14 @@ jobs:
         run: |
           git diff --exit-code VERSIONS.yaml || echo "changed=true" >> $GITHUB_OUTPUT
 
+      - name: Detect Changed Editors
+        id: detect
+        if: steps.git-check.outputs.changed == 'true'
+        run: |         
+          CHANGED_LIST=$(git diff -U0 VERSIONS.yaml | grep -E "^\+[a-z]" | cut -d: -f1 | sed 's/^+//' | jq -R . | jq -s -c .)
+          echo "Detected changes: $CHANGED_LIST"
+          echo "editors=$CHANGED_LIST" >> $GITHUB_OUTPUT
+
       - name: Commit and push changes
         if: steps.git-check.outputs.changed == 'true'
         run: |
@@ -45,5 +53,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Triggering build workflow..."
-          gh workflow run publish.yml --ref main
+          CHANGES='${{ steps.detect.outputs.editors }}'
+          echo "Triggering build for: $CHANGES"
+          gh workflow run publish.yml \
+            --ref main \
+            -f editors_json="$CHANGES"
