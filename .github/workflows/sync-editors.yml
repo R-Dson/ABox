@@ -30,11 +30,11 @@ jobs:
         id: detect
         if: steps.git-check.outputs.changed == 'true'
         run: |
-          CHANGED_EDITORS=$(git diff -U0 config/editors.json | grep -E '^\+' | grep '"version":' -B 1 | grep '"[a-zA-Z0-9_-]\+":' | sed -E 's/^\+.*"([^"]+)":.*/\1/' | jq -R . | jq -s -c .)
-          
-          if [[ -z "$CHANGED_EDITORS" || "$CHANGED_EDITORS" == "[]" ]]; then
-             CHANGED_EDITORS=$(git diff -U0 config/editors.json | grep -E '^\+' | grep -E '"[a-zA-Z0-9_-]\+":' | sed -E 's/^\+.*"([^"]+)":.*/\1/' | jq -R . | jq -s -c .)
-          fi
+          CHANGED_EDITORS=$(jq -n \
+            --argjson old "$(git show HEAD:config/editors.json | jq .editors)" \
+            --argjson new "$(cat config/editors.json | jq .editors)" \
+            '$new | to_entries | .[] | select(.value != $old[.key]) | .key' \
+            | jq -s -c .)
 
           echo "Detected changes: $CHANGED_EDITORS"
           echo "editors=$CHANGED_EDITORS" >> $GITHUB_OUTPUT
