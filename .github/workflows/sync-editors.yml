@@ -2,7 +2,7 @@ name: Sync Editor Versions
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # Run every 10 minutes
+    - cron: '*/15 * * * *'  # Run every 15 minutes
   workflow_dispatch:
 
 jobs:
@@ -34,8 +34,9 @@ jobs:
       - name: Detect Changed Editors
         id: detect
         if: steps.git-check.outputs.changed == 'true'
-        run: |         
-          CHANGED_LIST=$(git diff -U0 VERSIONS.yaml | grep -E "^\+[a-z]" | cut -d: -f1 | sed 's/^+//' | jq -R . | jq -s -c .)
+        run: |
+          CHANGED_LIST=$(git diff -U0 VERSIONS.yaml | grep -E "^\+\s*[a-zA-Z]" | sed -E 's/^\+\s*([^:]+):.*/\1/' | jq -R . | jq -s -c .)
+          
           echo "Detected changes: $CHANGED_LIST"
           echo "editors=$CHANGED_LIST" >> $GITHUB_OUTPUT
 
@@ -45,7 +46,8 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add VERSIONS.yaml
-          git commit -m "chore: update editor versions"
+          # IMPORTANT: [skip ci] prevents the standard 'on: push' trigger
+          git commit -m "chore: update editor versions [skip ci]"
           git push
 
       - name: Trigger Build Workflow
