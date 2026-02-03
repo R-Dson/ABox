@@ -101,7 +101,7 @@ sync_to_vols() {
     script="$script wait; chown -R $HOST_UID:$HOST_GID /vol/config /vol/cache /vol/state /vol/share 2>/dev/null || true"
     
     if [[ -n "$mounts" ]]; then
-        $CONTAINER_RUNTIME run --rm $mounts alpine sh -c "$script"
+        $CONTAINER_RUNTIME run --rm --user $HOST_UID:$HOST_GID $mounts alpine sh -c "$script"
     fi
 }
 
@@ -127,8 +127,7 @@ sync_from_vols() {
     done
     
     script="$script wait"
-    $CONTAINER_RUNTIME run --rm $mounts alpine sh -c "$script"
-    chown -R "$HOST_UID:$HOST_GID" "$HOST_CONFIG_PATH" "$HOST_CACHE" "$HOST_STATE" "$HOST_SHARE" 2>/dev/null || true
+    $CONTAINER_RUNTIME run --rm --user $HOST_UID:$HOST_GID $mounts alpine sh -c "$script"
 }
 
 # --- Main Execution ---
@@ -244,12 +243,6 @@ $CONTAINER_RUNTIME run --rm $INTERACTIVE_FLAGS \
     --pull "$PULL_POLICY" \
     --name "abox-$EDITOR_NAME-$(basename "$TARGET_DIR")-$TIMESTAMP" \
     --hostname abx \
-    --read-only \
-    --tmpfs /tmp \
-    --tmpfs /run \
-    --tmpfs /home/agent/.cache:uid=$HOST_UID \
-    --tmpfs /home/agent/.local/state:uid=$HOST_UID \
-    --tmpfs /home/agent/.local/share:uid=$HOST_UID \
     -e HOST_UID="$HOST_UID" \
     -e HOST_GID="$HOST_GID" \
     $ENV_FLAGS \
