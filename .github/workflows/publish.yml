@@ -41,7 +41,7 @@ jobs:
             echo "editors=$INPUT_JSON" >> $GITHUB_OUTPUT
           else
             echo "No input list provided. Building ALL editors."
-            echo "editors=${{ env.ALL_EDITORS }}" >> $GITHUB_OUTPUT
+            echo 'editors=${{ env.ALL_EDITORS }}' >> $GITHUB_OUTPUT
           fi
 
   publish-images:
