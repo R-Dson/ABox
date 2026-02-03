@@ -19,7 +19,6 @@ log_error() {
 }
 
 detect_runtime() {
-    # 1. Check for explicit override
     if [[ -n "$ABOX_RUNTIME" ]]; then
         if command -v "$ABOX_RUNTIME" >/dev/null 2>&1 && "$ABOX_RUNTIME" info >/dev/null 2>&1; then
             echo "$ABOX_RUNTIME"
@@ -29,35 +28,31 @@ detect_runtime() {
         return 1
     fi
 
-    # 2. Prefer Docker
     if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
         echo "docker"
         return 0
     fi
 
-    # 3. Fallback to Podman
     if command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then
         echo "podman"
         return 0
     fi
 
     log_error "No healthy container runtime found (Docker or Podman)."
-    log_error "Ensure your container engine is running and accessible."
     return 1
 }
 
-# Returns: image_tag|binary_command|config_path|env_vars|legacy_path
 get_editor_info() {
     local editor=$1
     case "$editor" in
+        aider)   echo "ghcr.io/r-dson/abox:aider|aider|.aider.conf.yml|OPENAI_API_KEY,ANTHROPIC_API_KEY|" ;;
         claude)   echo "ghcr.io/r-dson/abox:claude|claude|.claude|ANTHROPIC_API_KEY|" ;;
-        aider)    echo "ghcr.io/r-dson/abox:aider|aider|.aider.conf.yml|OPENAI_API_KEY,ANTHROPIC_API_KEY|" ;;
-        copilot)  echo "ghcr.io/r-dson/abox:copilot|copilot|.copilot|GITHUB_TOKEN|" ;;
-        vibe)     echo "ghcr.io/r-dson/abox:vibe|vibe|.vibe||" ;;
-        goose)    echo "ghcr.io/r-dson/abox:goose|goose|.config/goose||" ;;
-        codex)    echo "ghcr.io/r-dson/abox:codex|codex|.codex||" ;;
-        gemini)   echo "ghcr.io/r-dson/abox:gemini|gemini|.gemini|GOOGLE_API_KEY|" ;;
+        codex)   echo "ghcr.io/r-dson/abox:codex|codex|.codex||" ;;
+        copilot)   echo "ghcr.io/r-dson/abox:copilot|copilot|.copilot|GITHUB_TOKEN|" ;;
         cursor)   echo "ghcr.io/r-dson/abox:cursor|cursor|.cursor||" ;;
+        gemini)   echo "ghcr.io/r-dson/abox:gemini|gemini|.gemini|GOOGLE_API_KEY|" ;;
+        goose)   echo "ghcr.io/r-dson/abox:goose|goose|.config/goose||" ;;
+        vibe)   echo "ghcr.io/r-dson/abox:vibe|vibe|.vibe||" ;;
         opencode|*) echo "ghcr.io/r-dson/abox:opencode|opencode|.config/opencode||.opencode" ;;
     esac
 }
@@ -67,7 +62,6 @@ ensure_host_path_exists() {
     local rel_path="$2"
 
     if [[ ! -e "$path" ]]; then
-        # Heuristic: check if it looks like a file (has extension)
         local filename=$(basename "$rel_path")
         if [[ "$filename" == *.* ]] && { [[ "${filename:0:1}" != "." ]] || [[ "$filename" == *.*.* ]]; }; then
             mkdir -p "$(dirname "$path")"
@@ -78,53 +72,67 @@ ensure_host_path_exists() {
     fi
 }
 
-# Sync data from Host -> Container Volume
-sync_host_to_vol() {
-    local host_path="$1"
-    local vol_name="$2"
-    local container_path="$3"
-
-    # Skip if host path doesn't exist
-    if [[ ! -e "$host_path" ]]; then return; fi
-    # Skip if it's an empty directory
-    if [[ -d "$host_path" ]] && [[ -z "$(ls -A "$host_path" 2>/dev/null)" ]]; then return; fi
-
-    if [[ -f "$host_path" ]]; then
-        # File: cat content into volume
-        local filename=$(basename "$host_path")
-        cat "$host_path" | $CONTAINER_RUNTIME run --rm -i \
-            -v "$vol_name:$container_path" \
-            alpine sh -c "cat > $container_path/$filename && chown $HOST_UID:$HOST_GID $container_path/$filename"
-    else
-        # Directory: tar extract into volume
-        tar -C "$host_path" -cf - . 2>/dev/null | $CONTAINER_RUNTIME run --rm -i \
-            -v "$vol_name:$container_path" \
-            alpine tar -C "$container_path" -xf - 2>/dev/null || true
+sync_to_vols() {
+    local mounts=""
+    local script="set -e;"
+    
+    # Config
+    if [[ -e "$HOST_CONFIG_PATH" ]]; then
+        if [[ -f "$HOST_CONFIG_PATH" ]]; then
+            mounts="$mounts -v $HOST_CONFIG_PATH:/host/config_file:ro"
+            script="$script cp /host/config_file /vol/config/$(basename "$HOST_CONFIG_PATH") &"
+        else
+            mounts="$mounts -v $HOST_CONFIG_PATH:/host/config:ro"
+            script="$script cp -r /host/config/. /vol/config/ &"
+        fi
+        mounts="$mounts -v $CONFIG_VOL:/vol/config"
+    fi
+    
+    # Cache/State/Share (Always directories)
+    for type in CACHE STATE SHARE; do
+        local host_var="HOST_$type"
+        local vol_var="${type}_VOL"
+        if [[ -e "${!host_var}" ]]; then
+            mounts="$mounts -v ${!host_var}:/host/${type,,}:ro -v ${!vol_var}:/vol/${type,,}"
+            script="$script cp -r /host/${type,,}/. /vol/${type,,}/ &"
+        fi
+    done
+    
+    script="$script wait; chown -R $HOST_UID:$HOST_GID /vol/config /vol/cache /vol/state /vol/share 2>/dev/null || true"
+    
+    if [[ -n "$mounts" ]]; then
+        $CONTAINER_RUNTIME run --rm $mounts alpine sh -c "$script"
     fi
 }
 
-# Sync data from Container Volume -> Host
-sync_vol_to_host() {
-    local vol_name="$1"
-    local host_path="$2"
-
-    # Handle file vs directory egress
-    if [[ -f "$host_path" ]]; then
-        local filename=$(basename "$host_path")
-        $CONTAINER_RUNTIME run --rm -i \
-            -v "$vol_name:/src" \
-            alpine cat "/src/$filename" > "$host_path" 2>/dev/null || true
+sync_from_vols() {
+    local mounts=""
+    local script="set -e;"
+    
+    # Config
+    if [[ -f "$HOST_CONFIG_PATH" ]]; then
+        mounts="$mounts -v $CONFIG_VOL:/vol/config:ro -v $(dirname "$HOST_CONFIG_PATH"):/host/config_dir"
+        script="$script cp /vol/config/$(basename "$HOST_CONFIG_PATH") /host/config_dir/ &"
     else
-        $CONTAINER_RUNTIME run --rm -i \
-            -v "$vol_name:/src" \
-            alpine tar -C /src -cf - . 2>/dev/null | tar -C "$host_path" -xf - 2>/dev/null || true
-        chown -R "$HOST_UID:$HOST_GID" "$host_path" 2>/dev/null || true
+        mounts="$mounts -v $CONFIG_VOL:/vol/config:ro -v $HOST_CONFIG_PATH:/host/config"
+        script="$script cp -r /vol/config/. /host/config/ &"
     fi
+    
+    # Others
+    for type in CACHE STATE SHARE; do
+        local host_var="HOST_$type"
+        local vol_var="${type}_VOL"
+        mounts="$mounts -v ${!vol_var}:/vol/${type,,}:ro -v ${!host_var}:/host/${type,,}"
+        script="$script cp -r /vol/${type,,}/. /host/${type,,}/ &"
+    done
+    
+    script="$script wait"
+    $CONTAINER_RUNTIME run --rm $mounts alpine sh -c "$script"
+    chown -R "$HOST_UID:$HOST_GID" "$HOST_CONFIG_PATH" "$HOST_CACHE" "$HOST_STATE" "$HOST_SHARE" 2>/dev/null || true
 }
 
 # --- Main Execution ---
 
-# 1. Argument Parsing
 CLI_EDITOR=""
 CLI_SHELL=false
 CLI_IT=false
@@ -145,21 +153,17 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Handle --default-editor persistence
 if [[ -n "$SET_DEFAULT" ]]; then
     mkdir -p "$(dirname "$ABX_CONF")"
     echo "EDITOR=$SET_DEFAULT" > "$ABX_CONF"
     echo "Default editor set to: $SET_DEFAULT"
-    # Exit if no execution intended
     if [[ ${#POSITIONAL_ARGS[@]} -eq 0 && -z "$CLI_EDITOR" && "$CLI_SHELL" == "false" && "$CLI_IT" == "false" ]]; then
         exit 0
     fi
 fi
 
-# Restore positional args
 set -- "${POSITIONAL_ARGS[@]}"
 
-# 2. Resolution: Editor & Runtime
 EDITOR_NAME="$CLI_EDITOR"
 [[ -z "$EDITOR_NAME" ]] && EDITOR_NAME="$ABOX_EDITOR"
 if [[ -z "$EDITOR_NAME" && -f "$ABX_CONF" ]]; then
@@ -170,7 +174,6 @@ fi
 CONTAINER_RUNTIME=$(detect_runtime) || exit 1
 IFS='|' read -r IMAGE_NAME COMMAND_NAME CONFIG_REL_PATH ENV_VAR_NAMES LEGACY_PATH <<< "$(get_editor_info "$EDITOR_NAME")"
 
-# 3. Path & Environment Setup
 TARGET_DIR="."
 if [[ $# -gt 0 ]] && [[ -d "$1" ]]; then
     TARGET_DIR="$1"
@@ -186,7 +189,6 @@ HOST_SHARE="$HOME/.local/share/$EDITOR_NAME"
 ensure_host_path_exists "$HOST_CONFIG_PATH" "$CONFIG_REL_PATH"
 mkdir -p "$HOST_CACHE" "$HOST_STATE" "$HOST_SHARE"
 
-# 4. Volume Lifecycle
 VOL_ID="$EDITOR_NAME-$TIMESTAMP"
 CONFIG_VOL="abox-config-$VOL_ID"
 CACHE_VOL="abox-cache-$VOL_ID"
@@ -210,29 +212,21 @@ $CONTAINER_RUNTIME run --rm \
     -v "$SHARE_VOL:/share" \
     alpine sh -c "chown -R $HOST_UID:$HOST_GID /config /cache /state /share"
 
-# 5. Sync In (Host -> Container)
 echo "Syncing data to sandbox..."
-( sync_host_to_vol "$HOST_CONFIG_PATH" "$CONFIG_VOL" "/config" ) &
-( sync_host_to_vol "$HOST_CACHE"       "$CACHE_VOL"  "/cache" ) &
-( sync_host_to_vol "$HOST_STATE"       "$STATE_VOL"  "/state" ) &
-( sync_host_to_vol "$HOST_SHARE"       "$SHARE_VOL"  "/share" ) &
-wait
+sync_to_vols
 
-# 6. Prepare & Execute Container
 INTERACTIVE_FLAGS="-i"
 [[ -t 0 || "$CLI_SHELL" == "true" || "$CLI_IT" == "true" ]] && INTERACTIVE_FLAGS="-it"
 
 EXEC_CMD="$COMMAND_NAME"
 [[ "$CLI_SHELL" == "true" ]] && EXEC_CMD="bash"
 
-# Build Env Args
 ENV_FLAGS=""
 IFS=',' read -ra ADDR <<< "$ENV_VAR_NAMES"
 for env_var in "${ADDR[@]}"; do
     [[ -n "${!env_var}" ]] && ENV_FLAGS="$ENV_FLAGS -e $env_var"
 done
 
-# Build Mount Args
 GUEST_CONFIG_PATH="/home/agent/$CONFIG_REL_PATH"
 CONFIG_MOUNTS="-v $CONFIG_VOL:$GUEST_CONFIG_PATH"
 [[ -n "$LEGACY_PATH" ]] && CONFIG_MOUNTS="$CONFIG_MOUNTS -v $CONFIG_VOL:/home/agent/$LEGACY_PATH"
@@ -240,19 +234,22 @@ CONFIG_MOUNTS="$CONFIG_MOUNTS -v $CACHE_VOL:/home/agent/.cache/$EDITOR_NAME"
 CONFIG_MOUNTS="$CONFIG_MOUNTS -v $STATE_VOL:/home/agent/.local/state/$EDITOR_NAME"
 CONFIG_MOUNTS="$CONFIG_MOUNTS -v $SHARE_VOL:/home/agent/.local/share/$EDITOR_NAME"
 
-# Global/Shared Mounts
 [[ -d "$HOME/.claude" ]] && CONFIG_MOUNTS="$CONFIG_MOUNTS -v $HOME/.claude:/home/agent/.claude:ro,z"
 CONFIG_MOUNTS="$CONFIG_MOUNTS -v abox-brew:/home/linuxbrew/.linuxbrew"
 
-# Determine Pull Policy
 PULL_POLICY="always"
 [[ "$CLI_OFFLINE" == "true" ]] && PULL_POLICY="missing"
 
-# Run
 $CONTAINER_RUNTIME run --rm $INTERACTIVE_FLAGS \
     --pull "$PULL_POLICY" \
     --name "abox-$EDITOR_NAME-$(basename "$TARGET_DIR")-$TIMESTAMP" \
     --hostname abx \
+    --read-only \
+    --tmpfs /tmp \
+    --tmpfs /run \
+    --tmpfs /home/agent/.cache:uid=$HOST_UID \
+    --tmpfs /home/agent/.local/state:uid=$HOST_UID \
+    --tmpfs /home/agent/.local/share:uid=$HOST_UID \
     -e HOST_UID="$HOST_UID" \
     -e HOST_GID="$HOST_GID" \
     $ENV_FLAGS \
@@ -266,13 +263,7 @@ $CONTAINER_RUNTIME run --rm $INTERACTIVE_FLAGS \
     "$IMAGE_NAME" "$EXEC_CMD" "$@"
 EXIT_CODE=$?
 
-# 7. Sync Out (Container -> Host)
 echo "Syncing changes back to host..."
-( sync_vol_to_host "$CONFIG_VOL" "$HOST_CONFIG_PATH" ) &
-( sync_vol_to_host "$CACHE_VOL"  "$HOST_CACHE" ) &
-( sync_vol_to_host "$STATE_VOL"  "$HOST_STATE" ) &
-( sync_vol_to_host "$SHARE_VOL"  "$HOST_SHARE" ) &
-wait
-
+sync_from_vols
 
 exit $EXIT_CODE

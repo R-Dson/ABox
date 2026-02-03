@@ -15,38 +15,36 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install dependencies
-        run: pip install -r scripts/requirements.txt
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Sync versions
-        run: python scripts/sync_versions.py
+        run: uv run scripts/sync_versions.py
 
       - name: Check for changes
         id: git-check
         run: |
-          git diff --exit-code VERSIONS.yaml || echo "changed=true" >> $GITHUB_OUTPUT
+          git diff --exit-code config/editors.json || echo "changed=true" >> $GITHUB_OUTPUT
 
       - name: Detect Changed Editors
         id: detect
         if: steps.git-check.outputs.changed == 'true'
         run: |
-          CHANGED_LIST=$(git diff -U0 VERSIONS.yaml | grep -E "^\+\s*[a-zA-Z]" | sed -E 's/^\+\s*([^:]+):.*/\1/' | jq -R . | jq -s -c .)
+          CHANGED_EDITORS=$(git diff -U0 config/editors.json | grep -E '^\+' | grep '"version":' -B 1 | grep '"[a-zA-Z0-9_-]\+":' | sed -E 's/^\+.*"([^"]+)":.*/\1/' | jq -R . | jq -s -c .)
           
-          echo "Detected changes: $CHANGED_LIST"
-          echo "editors=$CHANGED_LIST" >> $GITHUB_OUTPUT
+          if [[ -z "$CHANGED_EDITORS" || "$CHANGED_EDITORS" == "[]" ]]; then
+             CHANGED_EDITORS=$(git diff -U0 config/editors.json | grep -E '^\+' | grep -E '"[a-zA-Z0-9_-]\+":' | sed -E 's/^\+.*"([^"]+)":.*/\1/' | jq -R . | jq -s -c .)
+          fi
+
+          echo "Detected changes: $CHANGED_EDITORS"
+          echo "editors=$CHANGED_EDITORS" >> $GITHUB_OUTPUT
 
       - name: Commit and push changes
         if: steps.git-check.outputs.changed == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add VERSIONS.yaml
-          # IMPORTANT: [skip ci] prevents the standard 'on: push' trigger
+          git add config/editors.json
           git commit -m "chore: update editor versions [skip ci]"
           git push
 

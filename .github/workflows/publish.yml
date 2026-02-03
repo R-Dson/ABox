@@ -4,7 +4,7 @@ on:
     branches: ['main']
     paths:
       - '.github/workflows/publish.yml'
-      - 'VERSIONS.yaml'
+      - 'config/editors.json'
       - 'bin/abx'
       - 'docker/**'
       - 'Makefile'
@@ -34,27 +34,15 @@ jobs:
       - name: Determine Matrix
         id: set-matrix
         run: |
-          # 1. Check if we received a specific list via workflow_dispatch input
           INPUT_JSON='${{ inputs.editors_json }}'
           
           if [[ -n "$INPUT_JSON" && "$INPUT_JSON" != "[]" ]]; then
             echo "Received specific editors to build: $INPUT_JSON"
             echo "editors=$INPUT_JSON" >> $GITHUB_OUTPUT
           else
-            # 2. Fallback: Build ALL (for standard pushes, schedule, or empty input)
             echo "No input list provided. Building ALL editors."
             echo "editors=${{ env.ALL_EDITORS }}" >> $GITHUB_OUTPUT
           fi
-
-  build-binary:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: make build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: abx-binary
-          path: bin/abx
 
   publish-images:
     needs: [setup-matrix]
@@ -73,16 +61,12 @@ jobs:
         id: config
         run: |
           EDITOR="${{ matrix.editor }}"
-          INSTALL=$(yq ".editors.$EDITOR.install" docker/editors.yaml)
-          VERSION=$(yq ".$EDITOR" VERSIONS.yaml)
-          CMD=$(yq ".editors.$EDITOR.cmd" docker/editors.yaml)
           
-          # Handle null/empty values
-          [[ "$INSTALL" == "null" ]] && INSTALL=""
-          [[ "$VERSION" == "null" ]] && VERSION=""
-          [[ "$CMD" == "null" ]] && CMD="opencode"
+          VERSION=$(jq -r ".editors.\"$EDITOR\".version" config/editors.json)
+          INSTALL_RAW=$(jq -r ".editors.\"$EDITOR\".install_cmd" config/editors.json)
+          INSTALL=${INSTALL_RAW//"{version}"/$VERSION}
+          CMD=$(jq -r ".editors.\"$EDITOR\".cmd_name" config/editors.json)
           
-          # Use multi-line output format for strings with special characters (pipes, etc)
           echo "install<<EOF" >> $GITHUB_OUTPUT
           echo "$INSTALL" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -129,7 +113,7 @@ jobs:
             COMMAND_NAME=${{ steps.config.outputs.cmd }}
 
   release:
-    needs: [build-binary, publish-images]
+    needs: [publish-images]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -137,11 +121,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Download binary
-        uses: actions/download-artifact@v4
-        with:
-          name: abx-binary
-          path: bin/
       - name: Create/Update GitHub Release
         uses: softprops/action-gh-release@v1
         with:

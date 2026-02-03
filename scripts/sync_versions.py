@@ -1,6 +1,10 @@
+# /// script
+# dependencies = ["requests"]
+# ///
+import json
 import os
 import requests
-import yaml
+
 
 def get_latest_github(repo):
     url = f"https://api.github.com/repos/{repo}/releases/latest"
@@ -9,12 +13,14 @@ def get_latest_github(repo):
         return response.json()["tag_name"]
     return None
 
+
 def get_latest_npm(package):
     url = f"https://registry.npmjs.org/{package}/latest"
     response = requests.get(url)
     if response.status_code == 200:
         return response.json()["version"]
     return None
+
 
 def get_latest_pypi(package):
     url = f"https://pypi.org/pypi/{package}/json"
@@ -23,12 +29,15 @@ def get_latest_pypi(package):
         return response.json()["info"]["version"]
     return None
 
+
 def main():
-    if not os.path.exists("VERSIONS.yaml"):
-        versions = {}
-    else:
-        with open("VERSIONS.yaml", "r") as f:
-            versions = yaml.safe_load(f) or {}
+    config_path = "config/editors.json"
+    if not os.path.exists(config_path):
+        print(f"Error: {config_path} not found")
+        return
+
+    with open(config_path, "r") as f:
+        data = json.load(f)
 
     mappings = {
         "opencode": ("github", "anomalyco/opencode"),
@@ -43,6 +52,9 @@ def main():
 
     updated = False
     for editor, (source, identifier) in mappings.items():
+        if editor not in data["editors"]:
+            continue
+
         latest = None
         if source == "github":
             latest = get_latest_github(identifier)
@@ -52,22 +64,24 @@ def main():
             latest = get_latest_pypi(identifier)
 
         if latest:
-            # Clean version string (strip 'v' prefix)
             clean_version = latest.lstrip("v")
-            print(f"Found {editor}: {clean_version}")
-            if versions.get(editor) != clean_version:
-                print(f"Updating {editor}: {versions.get(editor)} -> {clean_version}")
-                versions[editor] = clean_version
+            current_version = data["editors"][editor].get("version")
+            if current_version != clean_version:
+                print(f"Updating {editor}: {current_version} -> {clean_version}")
+                data["editors"][editor]["version"] = clean_version
                 updated = True
+            else:
+                print(f"{editor} is up to date ({clean_version})")
         else:
             print(f"Could not find latest for {editor}")
 
     if updated:
-        with open("VERSIONS.yaml", "w") as f:
-            yaml.dump(versions, f, default_flow_style=False)
-        print("Updated VERSIONS.yaml")
+        with open(config_path, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"Updated {config_path}")
     else:
         print("All versions are up to date")
+
 
 if __name__ == "__main__":
     main()

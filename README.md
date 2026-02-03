@@ -4,9 +4,9 @@
 
 ## Features
 
-- **Security First**: Runs in an isolated container with dropped capabilities and path validation.
-- **Airlock Pattern**: Ephemeral volumes ensure host files remain untouched - editors cannot directly modify your filesystem.
-- **Multi-Editor Support**: Choose between OpenCode, Claude Code, Aider, Copilot, Goose, and more.
+- **Security First**: Runs in an isolated container with dropped capabilities (`--cap-drop=ALL`). No Docker socket access prevents host-level privilege escalation.
+- **Airlock Pattern**: Ephemeral volumes ensure host files remain untouched - editors cannot directly modify your system configuration or secrets.
+- **Rootless Execution**: Maps your host UID/GID into the container, ensuring file permissions remain consistent and the agent never runs as root.
 - **Runtime Agnostic**: Automatically detects and uses Docker or Podman.
 - **Easy Integration**: Seamlessly handles authentication keys and workspace mounting.
 - **Cross-platform**: Works on Linux, macOS, and Windows (via WSL2).
@@ -77,13 +77,13 @@ abx --default-editor claude
 ## Configuration
 
 - **Global Config**: `~/.config/abx.conf` stores your default editor.
-- **Bidirectional Sync**: All editor-specific directories (config, cache, state, and share) are synchronized using ephemeral volumes:
+- **Bidirectional Sync**: All editor-specific directories (config, cache, state, and share) are synchronized using ephemeral volumes. This creates a security barrier:
   - Config: `~/.config/*`, `~/.claude`, `~/.opencode`, etc.
   - Cache: `~/.cache/*`
   - State: `~/.local/state/*`
   - Share: `~/.local/share/*`
-  - Data is copied from host before running and back to host after completion
-  - Editors cannot directly modify host files for security
+  - Data is synced from host before running and back to host after completion.
+  - **Security Benefit**: Editors cannot directly modify host files, run commands outside the sandbox, or perform directory traversal attacks to access sensitive data like SSH keys.
 - **Workspace**: Your current directory is **mounted** at `/workspace` inside the container with **read-write access**.
 
 ## Development

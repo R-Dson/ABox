@@ -2,10 +2,11 @@ CONTAINER_RUNTIME ?= docker
 IMAGE_NAME ?= ghcr.io/r-dson/abox
 ABX_EDITOR ?= opencode
 
-# Extract info from YAML files without yq/PyYAML
-VERSION = $(shell grep "^$(ABX_EDITOR):" VERSIONS.yaml | cut -d' ' -f2)
-INSTALL_CMD = $(shell awk -v e="$(ABX_EDITOR)" '$$0 ~ "^  " e ":" {f=1; next} f && /install:/ {sub(/.*install: "/, ""); sub(/".*/, ""); print; exit} f && /^[a-zA-Z]/ {f=0}' docker/editors.yaml)
-COMMAND_NAME = $(shell awk -v e="$(ABX_EDITOR)" '$$0 ~ "^  " e ":" {f=1; next} f && /cmd:/ {sub(/.*cmd: "/, ""); sub(/".*/, ""); print; exit} f && /^[a-zA-Z]/ {f=0}' docker/editors.yaml)
+# Extract build metadata from config/editors.json
+VERSION = $(shell jq -r '.editors["$(ABX_EDITOR)"].version' config/editors.json)
+INSTALL_CMD_RAW = $(shell jq -r '.editors["$(ABX_EDITOR)"].install_cmd' config/editors.json)
+INSTALL_CMD = $(subst {version},$(VERSION),$(INSTALL_CMD_RAW))
+COMMAND_NAME = $(shell jq -r '.editors["$(ABX_EDITOR)"].cmd_name' config/editors.json)
 
 IMAGE_TAG = $(IMAGE_NAME):$(ABX_EDITOR)
 
@@ -30,4 +31,3 @@ install: build
 	sudo cp bin/abx /usr/local/bin/abx
 	sudo chmod +x /usr/local/bin/abx
 	@echo "Installation complete. ABox installed to /usr/local/bin/abx"
-
