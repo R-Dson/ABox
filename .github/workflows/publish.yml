@@ -1,8 +1,7 @@
 name: Build and Publish ABox
 on:
   push:
-    branches:
-      - main
+    branches: ['main']
     paths:
       - '.github/workflows/publish.yml'
       - 'VERSIONS.yaml'
@@ -15,24 +14,50 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      editors_json:
+        description: 'JSON array of editors to build (e.g. ["claude", "vibe"])'
+        required: false
+        default: ''
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: r-dson/abox
+  # Defines the fallback list
+  ALL_EDITORS: '["opencode", "claude", "aider", "copilot", "vibe", "goose", "codex", "gemini", "cursor"]'
+
 jobs:
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix_editors: ${{ steps.set-matrix.outputs.editors }}
+    steps:
+      - name: Determine Matrix
+        id: set-matrix
+        run: |
+          # 1. Check if we received a specific list via workflow_dispatch input
+          INPUT_JSON='${{ inputs.editors_json }}'
+          
+          if [[ -n "$INPUT_JSON" && "$INPUT_JSON" != "[]" ]]; then
+            echo "Received specific editors to build: $INPUT_JSON"
+            echo "editors=$INPUT_JSON" >> $GITHUB_OUTPUT
+          else
+            # 2. Fallback: Build ALL (for standard pushes, schedule, or empty input)
+            echo "No input list provided. Building ALL editors."
+            echo "editors=${{ env.ALL_EDITORS }}" >> $GITHUB_OUTPUT
+          fi
+
   build-binary:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Build binary
-        run: make build
-      - name: Upload binary
-        uses: actions/upload-artifact@v4
+      - uses: actions/checkout@v4
+      - run: make build
+      - uses: actions/upload-artifact@v4
         with:
           name: abx-binary
           path: bin/abx
 
   publish-images:
+    needs: [setup-matrix]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        editor: [opencode, claude, aider, copilot, vibe, goose, codex, gemini, cursor]
+        editor: ${{ fromJson(needs.setup-matrix.outputs.matrix_editors) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
