@@ -62,10 +62,18 @@ jobs:
         run: |
           EDITOR="${{ matrix.editor }}"
           
+          # Extract values
           VERSION=$(jq -r ".editors.\"$EDITOR\".version" config/editors.json)
           INSTALL_RAW=$(jq -r ".editors.\"$EDITOR\".install_cmd" config/editors.json)
-          INSTALL=${INSTALL_RAW//"{version}"/$VERSION}
           CMD=$(jq -r ".editors.\"$EDITOR\".cmd_name" config/editors.json)
+          
+          # Safety check: Exit if we couldn't find the editor config
+          if [ "$VERSION" == "null" ] || [ "$INSTALL_RAW" == "null" ]; then
+            echo "Error: Could not find config for editor '$EDITOR'"
+            exit 1
+          fi
+
+          INSTALL=${INSTALL_RAW//"{version}"/$VERSION}
           
           echo "install<<EOF" >> $GITHUB_OUTPUT
           echo "$INSTALL" >> $GITHUB_OUTPUT
