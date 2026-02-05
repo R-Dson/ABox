@@ -6,21 +6,6 @@ log_error() {
     echo "ERROR: $*" >&2
 }
 
-read_exclusions() {
-    local exclude_file="$1"
-    local exclusions=()
-    
-    if [[ -f "$exclude_file" ]]; then
-        while IFS= read -r line || [[ -n "$line" ]]; do
-            line="${line#"${line%%[![:space:]]*}"}"
-            [[ -z "$line" || "$line" == \#* ]] && continue
-            exclusions+=("$line")
-        done < "$exclude_file"
-    fi
-    
-    printf '%s\n' "${exclusions[@]}"
-}
-
 detect_runtime() {
     if [[ -n "$ABOX_RUNTIME" ]]; then
         if command -v "$ABOX_RUNTIME" >/dev/null 2>&1 && "$ABOX_RUNTIME" info >/dev/null 2>&1; then

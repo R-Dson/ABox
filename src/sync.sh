@@ -63,19 +63,14 @@ sync_from_vols() {
 sync_workspace() {
     local exclude_file="$1"
     local workspace_vol="$2"
+    local clean_exclude
     
-    # Clean up exclusions (remove comments and empty lines)
-    local clean_exclude="/tmp/abx_exclude_$$"
-    if [[ -f "$exclude_file" ]]; then
-        grep -vE '^\s*#' "$exclude_file" | grep -vE '^\s*$' > "$clean_exclude"
-    else
-        touch "$clean_exclude"
-    fi
+    # Prepare exclusion file
+    clean_exclude=$(prepare_exclusion_file "$exclude_file") || true
     
     # Use tar to stream files to the volume, respecting exclusions
     local tar_opts="-cf -"
-    if [[ -s "$clean_exclude" ]]; then
-        # Check if tar supports -X (both GNU and BSD tar should)
+    if [[ -n "$clean_exclude" ]]; then
         tar_opts="$tar_opts -X $clean_exclude"
     fi
 
@@ -86,7 +81,8 @@ sync_workspace() {
         tar $tar_opts . | $CONTAINER_RUNTIME run --rm -i --user $HOST_UID:$HOST_GID -v "$workspace_vol:/dst" alpine tar -xf - -C /dst
     )
     
-    rm -f "$clean_exclude"
+    # Cleanup
+    [[ -n "$clean_exclude" ]] && rm -f "$clean_exclude"
     return 0
 }
 

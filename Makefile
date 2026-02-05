@@ -33,9 +33,11 @@ bundle:
 	@echo '' >> bin/abx
 	@cat src/helpers.sh >> bin/abx
 	@echo '' >> bin/abx
+	@cat src/exclusion.sh >> bin/abx
+	@echo '' >> bin/abx
 	@cat src/sync.sh >> bin/abx
 	@echo '' >> bin/abx
-	@tail -n +14 src/main.sh >> bin/abx
+	@tail -n +15 src/main.sh >> bin/abx
 	@chmod +x bin/abx
 	@echo "Bundle created: bin/abx"
 

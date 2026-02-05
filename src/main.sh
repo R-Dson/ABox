@@ -14,6 +14,7 @@ TIMESTAMP=$(date +%s)
 # Source helper modules
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 source "$SCRIPT_DIR/helpers.sh"
+source "$SCRIPT_DIR/exclusion.sh"
 source "$SCRIPT_DIR/sync.sh"
 
 # --- Main Execution ---
