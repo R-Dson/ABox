@@ -27,19 +27,17 @@ env:
   ALL_EDITORS: '["opencode", "claude", "aider", "copilot", "vibe", "goose", "codex", "gemini", "cursor"]'
 
 jobs:
-  build-binary:
+  bundle:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Install shc
-        run: sudo apt-get update && sudo apt-get install -y shc
-      - name: Compile binary
-        run: make compile
-      - name: Upload binary artifact
+      - name: Bundle source files
+        run: make bundle
+      - name: Upload bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: abx-binary
+          name: abx-script
           path: bin/abx
           retention-days: 1
 
@@ -138,19 +136,17 @@ jobs:
             COMMAND_NAME=${{ steps.config.outputs.cmd }}
 
   release:
-    needs: [build-binary, publish-images]
+    needs: [bundle, publish-images]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download binary artifact
+      - name: Download bundle artifact
         uses: actions/download-artifact@v4
         with:
-          name: abx-binary
+          name: abx-script
           path: bin/
-      - name: Make binary executable
-        run: chmod +x bin/abx
       - name: Create/Update GitHub Release
         uses: softprops/action-gh-release@v1
         with:

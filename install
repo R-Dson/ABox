@@ -45,8 +45,8 @@ case $choice in
         ;;
 esac
 
-# Download binary from GitHub releases
-echo "Downloading abx from GitHub releases..."
+# Download script from GitHub releases
+echo "Downloading abx script from GitHub releases..."
 if ! curl -fsSL "$RELEASE_URL" -o "$BINARY_NAME"; then
     echo "Error: Failed to download abx."
     echo "Please check that a release exists at: $RELEASE_URL"

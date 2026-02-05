@@ -10,7 +10,7 @@ COMMAND_NAME = $(shell jq -r '.editors["$(ABX_EDITOR)"].cmd_name' config/editors
 
 IMAGE_TAG = $(IMAGE_NAME):$(ABX_EDITOR)
 
-.PHONY: build install test bundle compile
+.PHONY: build install test bundle
 
 # Default target - build Docker image
 build:
@@ -25,33 +25,22 @@ build:
 # Bundle source files into single script
 bundle:
 	@echo "Bundling source files..."
-	@mkdir -p build
-	@echo '#!/bin/bash' > build/abx
-	@echo '# ABox - Agnostic Sandbox Runtime' >> build/abx
-	@echo '# This is a generated file - do not edit directly' >> build/abx
-	@echo '# Source files are in src/ directory' >> build/abx
-	@echo '' >> build/abx
-	@echo 'set -o pipefail' >> build/abx
-	@echo '' >> build/abx
-	@echo '# Read main script' >> build/abx
-	@cat src/helpers.sh >> build/abx
-	@echo '' >> build/abx
-	@cat src/sync.sh >> build/abx
-	@echo '' >> build/abx
-	@sed '/^source.*SCRIPT_DIR.*\.sh/d' src/main.sh | tail -n +14 >> build/abx
-	@chmod +x build/abx
-	@echo "Bundle created: build/abx"
+	@mkdir -p bin
+	@echo '#!/bin/bash' > bin/abx
+	@echo '# ABox - Agnostic Sandbox Runtime' >> bin/abx
+	@echo '# This is a generated file - do not edit directly' >> bin/abx
+	@echo '# Source files are in src/ directory' >> bin/abx
+	@echo '' >> bin/abx
+	@cat src/helpers.sh >> bin/abx
+	@echo '' >> bin/abx
+	@cat src/sync.sh >> bin/abx
+	@echo '' >> bin/abx
+	@tail -n +14 src/main.sh >> bin/abx
+	@chmod +x bin/abx
+	@echo "Bundle created: bin/abx"
 
-# Compile to binary with shc
-compile: bundle
-	@echo "Compiling to binary..."
-	@which shc >/dev/null 2>&1 || (echo "shc not found. Run: brew install shc" && exit 1)
-	@shc -f build/abx -o bin/abx
-	@rm -f build/abx.x.c
-	@echo "Binary compiled: bin/abx"
-
-# Install compiled binary
-install: compile
+# Install bundled script
+install: bundle
 	sudo cp bin/abx /usr/local/bin/abx
 	sudo chmod +x /usr/local/bin/abx
 	@echo "Installation complete. ABox installed to /usr/local/bin/abx"
