@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/publish.yml'
       - 'config/editors.json'
+      - 'src/**'
       - 'bin/abx'
       - 'docker/**'
       - 'Makefile'
@@ -26,6 +27,22 @@ env:
   ALL_EDITORS: '["opencode", "claude", "aider", "copilot", "vibe", "goose", "codex", "gemini", "cursor"]'
 
 jobs:
+  build-binary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install shc
+        run: sudo apt-get update && sudo apt-get install -y shc
+      - name: Compile binary
+        run: make compile
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: abx-binary
+          path: bin/abx
+          retention-days: 1
+
   setup-matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -121,14 +138,19 @@ jobs:
             COMMAND_NAME=${{ steps.config.outputs.cmd }}
 
   release:
-    needs: [publish-images]
+    needs: [build-binary, publish-images]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: abx-binary
+          path: bin/
+      - name: Make binary executable
+        run: chmod +x bin/abx
       - name: Create/Update GitHub Release
         uses: softprops/action-gh-release@v1
         with:

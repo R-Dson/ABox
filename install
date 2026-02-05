@@ -6,7 +6,7 @@ set -e
 
 REPO="R-Dson/ABox"
 BINARY_NAME="abx"
-RAW_URL="https://raw.githubusercontent.com/$REPO/main/bin/abx"
+RELEASE_URL="https://github.com/$REPO/releases/latest/download/$BINARY_NAME"
 
 echo "ABox Installation"
 echo "-------------------"
@@ -45,10 +45,11 @@ case $choice in
         ;;
 esac
 
-# Download binary
-echo "Downloading abx..."
-if ! curl -fsSL "$RAW_URL" -o "$BINARY_NAME"; then
+# Download binary from GitHub releases
+echo "Downloading abx from GitHub releases..."
+if ! curl -fsSL "$RELEASE_URL" -o "$BINARY_NAME"; then
     echo "Error: Failed to download abx."
+    echo "Please check that a release exists at: $RELEASE_URL"
     exit 1
 fi
 

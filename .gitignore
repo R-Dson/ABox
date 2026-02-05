@@ -1,0 +1,13 @@
+# Build artifacts
+build/
+*.x.c
+
+# Editor-specific
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS-specific
+.DS_Store
+Thumbs.db
