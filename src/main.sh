@@ -15,6 +15,7 @@ TIMESTAMP=$(date +%s)
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 source "$SCRIPT_DIR/helpers.sh"
 source "$SCRIPT_DIR/exclusion.sh"
+source "$SCRIPT_DIR/container.sh"
 source "$SCRIPT_DIR/sync.sh"
 
 # --- Main Execution ---
@@ -79,39 +80,11 @@ HOST_SHARE="$HOME/.local/share/$EDITOR_NAME"
 ensure_host_path_exists "$HOST_CONFIG_PATH" "$CONFIG_REL_PATH"
 mkdir -p "$HOST_CACHE" "$HOST_STATE" "$HOST_SHARE"
 
-VOL_ID="$EDITOR_NAME-$TIMESTAMP"
-CONFIG_VOL="abox-config-$VOL_ID"
-CACHE_VOL="abox-cache-$VOL_ID"
-STATE_VOL="abox-state-$VOL_ID"
-SHARE_VOL="abox-share-$VOL_ID"
-WORKSPACE_VOL="abox-workspace-$VOL_ID"
-
-for vol in "$CONFIG_VOL" "$CACHE_VOL" "$STATE_VOL" "$SHARE_VOL"; do
-    $CONTAINER_RUNTIME volume create "$vol" > /dev/null 2>&1
-done
-
-if [[ "$USE_EXCLUSIONS" == "true" ]]; then
-    $CONTAINER_RUNTIME volume create "$WORKSPACE_VOL" > /dev/null 2>&1
-fi
-
-cleanup() {
-    if [[ "$USE_EXCLUSIONS" == "true" ]]; then
-        $CONTAINER_RUNTIME volume rm "$WORKSPACE_VOL" > /dev/null 2>&1
-    fi
-    $CONTAINER_RUNTIME volume rm "$CONFIG_VOL" "$CACHE_VOL" "$STATE_VOL" "$SHARE_VOL" > /dev/null 2>&1
-}
-trap cleanup EXIT
-
-# Initialize Volume Ownership
-vol_mounts="-v $CONFIG_VOL:/config -v $CACHE_VOL:/cache -v $STATE_VOL:/state -v $SHARE_VOL:/share"
-chown_targets="/config /cache /state /share"
-if [[ "$USE_EXCLUSIONS" == "true" ]]; then
-    vol_mounts="$vol_mounts -v $WORKSPACE_VOL:/workspace"
-    chown_targets="$chown_targets /workspace"
-fi
-$CONTAINER_RUNTIME run --rm \
-    $vol_mounts \
-    alpine sh -c "chown -R $HOST_UID:$HOST_GID $chown_targets"
+# Initialize and create volumes
+init_volumes "$EDITOR_NAME" "$TIMESTAMP"
+create_volumes "$USE_EXCLUSIONS"
+setup_volume_cleanup "$USE_EXCLUSIONS"
+init_volume_ownership "$USE_EXCLUSIONS"
 
 echo "Syncing data to sandbox..."
 sync_to_vols
@@ -120,51 +93,16 @@ if [[ "$USE_EXCLUSIONS" == "true" ]]; then
     sync_workspace "$EXCLUDE_FILE" "$WORKSPACE_VOL"
 fi
 
-INTERACTIVE_FLAGS="-i"
-[[ -t 0 || "$CLI_SHELL" == "true" || "$CLI_IT" == "true" ]] && INTERACTIVE_FLAGS="-it"
+# Prepare container execution
+INTERACTIVE_FLAGS=$(get_interactive_flags "$CLI_SHELL" "$CLI_IT")
+EXEC_CMD=$(get_exec_cmd "$COMMAND_NAME" "$CLI_SHELL")
+ENV_FLAGS=$(build_env_flags "$ENV_VAR_NAMES")
+CONFIG_MOUNTS=$(build_config_mounts "$EDITOR_NAME" "$CONFIG_REL_PATH" "$LEGACY_PATH")
+WORKSPACE_MOUNT=$(build_workspace_mount "$TARGET_DIR" "$USE_EXCLUSIONS")
+PULL_POLICY=$(get_pull_policy "$CLI_OFFLINE")
 
-EXEC_CMD="$COMMAND_NAME"
-[[ "$CLI_SHELL" == "true" ]] && EXEC_CMD="bash"
-
-ENV_FLAGS=""
-IFS=',' read -ra ADDR <<< "$ENV_VAR_NAMES"
-for env_var in "${ADDR[@]}"; do
-    [[ -n "${!env_var}" ]] && ENV_FLAGS="$ENV_FLAGS -e $env_var"
-done
-
-GUEST_CONFIG_PATH="/home/agent/$CONFIG_REL_PATH"
-CONFIG_MOUNTS="-v $CONFIG_VOL:$GUEST_CONFIG_PATH"
-[[ -n "$LEGACY_PATH" ]] && CONFIG_MOUNTS="$CONFIG_MOUNTS -v $CONFIG_VOL:/home/agent/$LEGACY_PATH"
-CONFIG_MOUNTS="$CONFIG_MOUNTS -v $CACHE_VOL:/home/agent/.cache/$EDITOR_NAME"
-CONFIG_MOUNTS="$CONFIG_MOUNTS -v $STATE_VOL:/home/agent/.local/state/$EDITOR_NAME"
-CONFIG_MOUNTS="$CONFIG_MOUNTS -v $SHARE_VOL:/home/agent/.local/share/$EDITOR_NAME"
-
-[[ -d "$HOME/.claude" ]] && CONFIG_MOUNTS="$CONFIG_MOUNTS -v $HOME/.claude:/home/agent/.claude:ro,z"
-CONFIG_MOUNTS="$CONFIG_MOUNTS -v abox-brew:/home/linuxbrew/.linuxbrew"
-
-PULL_POLICY="always"
-[[ "$CLI_OFFLINE" == "true" ]] && PULL_POLICY="missing"
-
-WORKSPACE_MOUNT="-v $TARGET_DIR:/workspace"
-if [[ "$USE_EXCLUSIONS" == "true" ]]; then
-    WORKSPACE_MOUNT="-v $WORKSPACE_VOL:/workspace"
-fi
-
-$CONTAINER_RUNTIME run --rm $INTERACTIVE_FLAGS \
-    --pull "$PULL_POLICY" \
-    --name "abox-$EDITOR_NAME-$(basename "$TARGET_DIR")-$TIMESTAMP" \
-    --hostname abx \
-    -e HOST_UID="$HOST_UID" \
-    -e HOST_GID="$HOST_GID" \
-    $ENV_FLAGS \
-    --cap-drop=ALL \
-    --cap-add=CHOWN \
-    --cap-add=SETUID \
-    --cap-add=SETGID \
-    --cap-add=DAC_OVERRIDE \
-    $WORKSPACE_MOUNT \
-    $CONFIG_MOUNTS \
-    "$IMAGE_NAME" "$EXEC_CMD" "$@"
+# Run container
+run_container "$IMAGE_NAME" "$EXEC_CMD" "$@"
 EXIT_CODE=$?
 
 echo "Syncing changes back to host..."

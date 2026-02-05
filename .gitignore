@@ -1,5 +1,6 @@
 # Build artifacts
 build/
+bin/abx
 *.x.c
 
 # Editor-specific
