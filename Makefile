@@ -31,6 +31,10 @@ bundle:
 	@echo '# This is a generated file - do not edit directly' >> bin/abx
 	@echo '# Source files are in src/ directory' >> bin/abx
 	@echo '' >> bin/abx
+	@# Add HOST_UID and HOST_GID definitions (needed for chown)
+	@echo 'HOST_UID=$${HOST_UID:-$$(id -u)}' >> bin/abx
+	@echo 'HOST_GID=$${HOST_GID:-$$(id -g)}' >> bin/abx
+	@echo '' >> bin/abx
 	@cat src/helpers.sh >> bin/abx
 	@echo '' >> bin/abx
 	@cat src/exclusion.sh >> bin/abx
@@ -39,8 +43,8 @@ bundle:
 	@echo '' >> bin/abx
 	@cat src/sync.sh >> bin/abx
 	@echo '' >> bin/abx
-	@# Strip out the source statements and SCRIPT_DIR from main.sh
-	@tail -n +16 src/main.sh | grep -v '^source ' | grep -v 'SCRIPT_DIR=' >> bin/abx
+	@# Strip out the source statements, SCRIPT_DIR, and HOST_UID/GID from main.sh
+	@tail -n +16 src/main.sh | grep -v '^source ' | grep -v 'SCRIPT_DIR=' | grep -v 'HOST_UID=' | grep -v 'HOST_GID=' >> bin/abx
 	@chmod +x bin/abx
 	@echo "Bundle created: bin/abx"
 
