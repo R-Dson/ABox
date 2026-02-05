@@ -1,0 +1,54 @@
+name: Bundle ABox Script
+on:
+  push:
+    branches: ['main']
+    paths:
+      - '.github/workflows/bundle.yml'
+      - 'src/**'
+      - 'Makefile'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'Makefile'
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Bundle source files
+        run: make bundle
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: abx-script
+          path: bin/abx
+          retention-days: 1
+
+  release:
+    needs: [bundle]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: abx-script
+          path: bin/
+      - name: Create/Update GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: bin/abx
+          tag_name: latest
+          name: 'Latest Build (Main)'
+          prerelease: true
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

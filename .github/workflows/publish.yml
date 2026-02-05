@@ -1,19 +1,19 @@
-name: Build and Publish ABox
+name: Build and Publish ABox Images
 on:
   push:
     branches: ['main']
     paths:
       - '.github/workflows/publish.yml'
       - 'config/editors.json'
-      - 'src/**'
-      - 'bin/abx'
       - 'docker/**'
-      - 'Makefile'
     tags:
       - 'v*'
   pull_request:
     branches:
       - main
+    paths:
+      - 'config/editors.json'
+      - 'docker/**'
   workflow_dispatch:
     inputs:
       editors_json:
@@ -27,20 +27,6 @@ env:
   ALL_EDITORS: '["opencode", "claude", "aider", "copilot", "vibe", "goose", "codex", "gemini", "cursor"]'
 
 jobs:
-  bundle:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Bundle source files
-        run: make bundle
-      - name: Upload bundle artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: abx-script
-          path: bin/abx
-          retention-days: 1
-
   setup-matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -134,29 +120,6 @@ jobs:
             INSTALL_CMD=${{ steps.config.outputs.install }}
             VERSION=${{ steps.config.outputs.version }}
             COMMAND_NAME=${{ steps.config.outputs.cmd }}
-
-  release:
-    needs: [bundle, publish-images]
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download bundle artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: abx-script
-          path: bin/
-      - name: Create/Update GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: bin/abx
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Latest Build (Main)' }}
-          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   cleanup-untagged:
     needs: publish-images
