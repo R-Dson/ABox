@@ -48,7 +48,7 @@ jobs:
           files: bin/abx
           tag_name: latest
           name: 'Latest Build (Main)'
-          prerelease: true
+          prerelease: false
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

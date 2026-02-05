@@ -6,7 +6,7 @@ set -e
 
 REPO="R-Dson/ABox"
 BINARY_NAME="abx"
-RELEASE_URL="https://github.com/$REPO/releases/download/latest/$BINARY_NAME"
+RELEASE_URL="https://github.com/$REPO/releases/latest/download/$BINARY_NAME"
 
 echo "ABox Installation"
 echo "-------------------"
