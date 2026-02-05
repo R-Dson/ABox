@@ -86,6 +86,17 @@ abx --default-editor claude
   - **Security Benefit**: Editors cannot directly modify host files, run commands outside the sandbox, or perform directory traversal attacks to access sensitive data like SSH keys.
 - **Workspace**: Your current directory is **mounted** at `/workspace` inside the container with **read-write access**.
 
+## Content Exclusion
+
+Create a `.abxignore` file to exclude sensitive files or large directories from the sandbox using glob patterns. When detected, ABox switches to a safe sync mode, ensuring excluded content is never mounted into the container.
+
+Example `.abxignore`:
+```text
+.env
+secrets/*.json
+node_modules/
+```
+
 ## Development
 
 Build a specific editor image:
