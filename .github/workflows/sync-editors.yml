@@ -19,7 +19,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Sync versions
-        run: uv run scripts/sync_versions.py
+        run: uv run config/sync_versions.py
 
       - name: Check for changes
         id: git-check
