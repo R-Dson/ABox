@@ -6,17 +6,29 @@ on:
       - '.github/workflows/bundle.yml'
       - 'src/**'
       - 'Makefile'
+      - 'tests/**'
     tags:
       - 'v*'
   pull_request:
     branches:
       - main
     paths:
+      - '.github/workflows/bundle.yml'
       - 'src/**'
       - 'Makefile'
+      - 'tests/**'
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Run exclusion unit tests
+        run: bash tests/exclusion-unit-test.sh
+
   bundle:
+    needs: [test]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -31,7 +43,7 @@ jobs:
           retention-days: 1
 
   release:
-    needs: [bundle]
+    needs: [test, bundle]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
