@@ -39,7 +39,8 @@ bundle:
 	@echo '' >> bin/abx
 	@cat src/sync.sh >> bin/abx
 	@echo '' >> bin/abx
-	@tail -n +16 src/main.sh >> bin/abx
+	@# Strip out the source statements and SCRIPT_DIR from main.sh
+	@tail -n +16 src/main.sh | grep -v '^source ' | grep -v 'SCRIPT_DIR=' >> bin/abx
 	@chmod +x bin/abx
 	@echo "Bundle created: bin/abx"
 
