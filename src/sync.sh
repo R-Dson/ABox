@@ -63,27 +63,52 @@ sync_from_vols() {
 sync_workspace() {
     local exclude_file="$1"
     local workspace_vol="$2"
-    local clean_exclude
+    local -a patterns=()
+    local include_list="/tmp/abx_include_list_$$"
+    local temp_tar="/tmp/abx_sync_$$.tar"
     
-    # Prepare exclusion file
-    clean_exclude=$(prepare_exclusion_file "$exclude_file") || true
-    
-    # Use tar to stream files to the volume, respecting exclusions
-    local tar_opts="-cf -"
-    if [[ -n "$clean_exclude" ]]; then
-        tar_opts="$tar_opts -X $clean_exclude"
+    # Read exclusion patterns into array
+    if [[ -f "$exclude_file" ]]; then
+        while IFS= read -r pattern; do
+            [[ -n "$pattern" ]] && patterns+=("$pattern")
+        done < <(read_exclusions "$exclude_file")
     fi
-
-    # Run tar in subshell to handle directory change
+    
+    if [[ ${#patterns[@]} -eq 0 ]]; then
+        # No exclusions - simple tar copy
+        (
+            cd "$TARGET_DIR" || exit 1
+            tar -cf - . | $CONTAINER_RUNTIME run --rm -i --user $HOST_UID:$HOST_GID -v "$workspace_vol:/dst" alpine tar -xf - -C /dst
+        )
+        return $?
+    fi
+    
+    # Build list of files to include (not excluded)
     (
         cd "$TARGET_DIR" || exit 1
-        # Stream tar output to container
-        tar $tar_opts . | $CONTAINER_RUNTIME run --rm -i --user $HOST_UID:$HOST_GID -v "$workspace_vol:/dst" alpine tar -xf - -C /dst
+        find . -type f -print0 2>/dev/null | while IFS= read -r -d '' path; do
+            # Remove leading ./
+            path="${path#./}"
+            if ! is_excluded "$path" "${patterns[@]}"; then
+                printf '%s\n' "$path"
+            fi
+        done
+    ) > "$include_list"
+    
+    # Create tar with only included files and stream to container
+    (
+        cd "$TARGET_DIR" || exit 1
+        tar -cf "$temp_tar" -T "$include_list" 2>/dev/null
     )
     
+    # Extract to workspace volume
+    $CONTAINER_RUNTIME run --rm -i --user $HOST_UID:$HOST_GID -v "$workspace_vol:/dst" alpine tar -xf "$temp_tar" -C /dst
+    local exit_code=$?
+    
     # Cleanup
-    [[ -n "$clean_exclude" ]] && rm -f "$clean_exclude"
-    return 0
+    rm -f "$include_list" "$temp_tar"
+    
+    return $exit_code
 }
 
 sync_workspace_back() {
