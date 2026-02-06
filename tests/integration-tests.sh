@@ -142,7 +142,15 @@ echo
 # Test 12: Skill Discovery Volumes
 echo "=== Test 12: Skill Discovery Volumes ==="
 echo "Verify opencode mounts Claude-compatible skill paths"
+SKILLS_MOUNTED=false
 if ABOX_RUNTIME=echo "$ABX_BIN" --editor opencode . 2>&1 | grep -q "\-v $HOME/.claude:/home/agent/.claude:ro,z"; then
+    SKILLS_MOUNTED=true
+fi
+if ABOX_RUNTIME=echo "$ABX_BIN" --editor opencode . 2>&1 | grep -q "\-v $HOME/.claude/skills:/home/agent/.claude/skills:ro,z"; then
+    SKILLS_MOUNTED=true
+fi
+
+if [[ "$SKILLS_MOUNTED" == "true" ]]; then
     echo -e "${GREEN}PASS${NC}: Claude-compatible skills volume mounted"
     PASS_COUNT=$((PASS_COUNT + 1))
 else

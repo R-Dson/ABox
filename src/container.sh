@@ -35,7 +35,11 @@ build_config_mounts() {
     mounts="$mounts -v $SHARE_VOL:/home/agent/.local/share/$editor_name"
     
     # Mount Claude skills if they exist
-    [[ -d "$HOME/.claude" ]] && mounts="$mounts -v $HOME/.claude:/home/agent/.claude:ro,z"
+    if [[ -d "$HOME/.claude" ]]; then
+        mounts="$mounts -v $HOME/.claude:/home/agent/.claude:ro,z"
+    elif [[ -d "$HOME/.claude/skills" ]]; then
+        mounts="$mounts -v $HOME/.claude/skills:/home/agent/.claude/skills:ro,z"
+    fi
     
     # Mount homebrew
     mounts="$mounts -v abox-brew:/home/linuxbrew/.linuxbrew"
@@ -83,10 +87,19 @@ run_container() {
     local exec_cmd="$2"
     shift 2
     
+    local network_flags=""
+    if [[ "$CLI_STRICT_NETWORK" == "true" ]]; then
+        # Block common cloud metadata hostnames to prevent SSRF
+        network_flags="--add-host metadata:127.0.0.1 --add-host metadata.google.internal:127.0.0.1 --add-host 169.254.169.254:127.0.0.1"
+    fi
+    
     $CONTAINER_RUNTIME run --rm $INTERACTIVE_FLAGS \
+        $network_flags \
         --pull "$PULL_POLICY" \
         --name "abox-$EDITOR_NAME-$(basename "$TARGET_DIR")-$TIMESTAMP" \
         --hostname abx \
+        --memory="${ABOX_MEMORY:-4g}" \
+        --cpus="${ABOX_CPUS:-2}" \
         -e HOST_UID="$HOST_UID" \
         -e HOST_GID="$HOST_GID" \
         $ENV_FLAGS \
@@ -95,6 +108,7 @@ run_container() {
         --cap-add=SETUID \
         --cap-add=SETGID \
         --cap-add=DAC_OVERRIDE \
+        --security-opt=no-new-privileges \
         $WORKSPACE_MOUNT \
         $CONFIG_MOUNTS \
         "$image_name" "$exec_cmd" "$@"

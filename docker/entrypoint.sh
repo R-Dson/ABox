@@ -35,7 +35,7 @@ fi
 
 # Fix ownership of persistent volumes if they changed
 if [ "$(stat -c '%u' /home/agent)" != "$USER_ID" ]; then
-    chown -R agent:agent /home/agent
+    chown -R agent:agent /home/agent 2>/dev/null || true
 fi
 
 # Drop root privileges and execute the command

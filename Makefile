@@ -39,6 +39,8 @@ bundle:
 	@echo '' >> bin/abx
 	@cat src/exclusion.sh >> bin/abx
 	@echo '' >> bin/abx
+	@cat src/audit.sh >> bin/abx
+	@echo '' >> bin/abx
 	@cat src/container.sh >> bin/abx
 	@echo '' >> bin/abx
 	@cat src/sync.sh >> bin/abx

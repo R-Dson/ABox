@@ -74,6 +74,9 @@ sync_workspace() {
         done < <(read_exclusions "$exclude_file")
     fi
     
+    # Add hardcoded security exclusions
+    patterns+=(".ssh" ".aws" ".env" ".gnupg" "**/.*key" "**/*.pem")
+    
     if [[ ${#patterns[@]} -eq 0 ]]; then
         # No exclusions - simple tar copy
         (
@@ -102,7 +105,7 @@ sync_workspace() {
     )
     
     # Extract to workspace volume
-    $CONTAINER_RUNTIME run --rm -i --user $HOST_UID:$HOST_GID -v "$workspace_vol:/dst" alpine tar -xf "$temp_tar" -C /dst
+    $CONTAINER_RUNTIME run --rm -i --user $HOST_UID:$HOST_GID -v "$workspace_vol:/dst" alpine tar -xf - -C /dst < "$temp_tar"
     local exit_code=$?
     
     # Cleanup

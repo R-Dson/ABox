@@ -15,15 +15,23 @@ TIMESTAMP=$(date +%s)
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 source "$SCRIPT_DIR/helpers.sh"
 source "$SCRIPT_DIR/exclusion.sh"
+source "$SCRIPT_DIR/audit.sh"
 source "$SCRIPT_DIR/container.sh"
 source "$SCRIPT_DIR/sync.sh"
 
 # --- Main Execution ---
 
+if [[ "$1" == "audit" ]]; then
+    shift
+    run_audit "$@"
+    exit 0
+fi
+
 CLI_EDITOR=""
 CLI_SHELL=false
 CLI_IT=false
 CLI_OFFLINE=false
+CLI_STRICT_NETWORK=false
 SET_DEFAULT=""
 POSITIONAL_ARGS=()
 
@@ -36,6 +44,7 @@ while [[ $# -gt 0 ]]; do
         --shell)            CLI_SHELL=true; shift ;;
         --force-it)         CLI_IT=true; shift ;;
         --offline)          CLI_OFFLINE=true; shift ;;
+        --strict-network)   CLI_STRICT_NETWORK=true; shift ;;
         *)                  POSITIONAL_ARGS+=("$1"); shift ;;
     esac
 done
@@ -70,7 +79,17 @@ TARGET_DIR=$(cd "$TARGET_DIR" && pwd)
 
 EXCLUDE_FILE="$TARGET_DIR/.abxignore"
 USE_EXCLUSIONS=false
-[[ -f "$EXCLUDE_FILE" ]] && USE_EXCLUSIONS=true
+if [[ -f "$EXCLUDE_FILE" ]]; then
+    USE_EXCLUSIONS=true
+else
+    # Automatically trigger Airlock if common secrets are detected
+    for secret in .ssh .aws .env .gnupg; do
+        if [[ -e "$TARGET_DIR/$secret" ]]; then
+            USE_EXCLUSIONS=true
+            break
+        fi
+    done
+fi
 
 HOST_CONFIG_PATH="$HOME/$CONFIG_REL_PATH"
 HOST_CACHE="$HOME/.cache/$EDITOR_NAME"
