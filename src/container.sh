@@ -88,7 +88,9 @@ run_container() {
     shift 2
     
     local network_flags=""
-    if [[ "$CLI_STRICT_NETWORK" == "true" ]]; then
+    if [[ "$CLI_NO_INTERNET" == "true" ]]; then
+        network_flags="--network none"
+    elif [[ "$CLI_STRICT_NETWORK" == "true" ]]; then
         # Block common cloud metadata hostnames to prevent SSRF
         network_flags="--add-host metadata:127.0.0.1 --add-host metadata.google.internal:127.0.0.1 --add-host 169.254.169.254:127.0.0.1"
     fi

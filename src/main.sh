@@ -32,6 +32,7 @@ CLI_SHELL=false
 CLI_IT=false
 CLI_OFFLINE=false
 CLI_STRICT_NETWORK=false
+CLI_NO_INTERNET=false
 SET_DEFAULT=""
 POSITIONAL_ARGS=()
 
@@ -45,6 +46,7 @@ while [[ $# -gt 0 ]]; do
         --force-it)         CLI_IT=true; shift ;;
         --offline)          CLI_OFFLINE=true; shift ;;
         --strict-network)   CLI_STRICT_NETWORK=true; shift ;;
+        --no-internet)      CLI_NO_INTERNET=true; shift ;;
         *)                  POSITIONAL_ARGS+=("$1"); shift ;;
     esac
 done
