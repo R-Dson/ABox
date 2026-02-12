@@ -11,7 +11,7 @@
       "cmd_name": "claude"
     },
     "aider": {
-      "version": "0.86.1",
+      "version": "0.86.2",
       "install_cmd": "uv tool install aider-chat@{version}",
       "cmd_name": "aider"
     },
