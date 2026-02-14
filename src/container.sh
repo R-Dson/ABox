@@ -46,6 +46,11 @@ build_config_mounts() {
         mounts="$mounts -v $HOME/.gitconfig:/home/agent/.gitconfig:ro,z"
     fi
 
+    # Mount SSH keys if they exist
+    if [[ -d "$HOME/.ssh" ]]; then
+        mounts="$mounts -v $HOME/.ssh:/home/agent/.ssh:ro,z"
+    fi
+
     # Mount homebrew
     mounts="$mounts -v abox-brew:/home/linuxbrew/.linuxbrew"
 
