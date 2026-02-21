@@ -30,13 +30,11 @@ jobs:
   bundle:
     needs: [test]
     runs-on: ubuntu-latest
-    env:
-      ABX_VERSION: $(date +%Y%m%d.%H%M%S)
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Bundle source files
-        run: make bundle
+        run: make bundle ABX_VERSION=$(git rev-parse --short HEAD)
       - name: Upload bundle artifact
         uses: actions/upload-artifact@v4
         with:
