@@ -42,10 +42,10 @@ sync_from_vols() {
     # Config
     if [[ -f "$HOST_CONFIG_PATH" ]]; then
         mounts="$mounts -v $CONFIG_VOL:/vol/config:ro -v $(dirname "$HOST_CONFIG_PATH"):/host/config_dir"
-        script="$script tar -cf - -C /vol/config $(basename "$HOST_CONFIG_PATH") | tar --no-same-owner --no-same-permissions -xf - -C /host/config_dir &"
+        script="$script tar -cf - -C /vol/config $(basename "$HOST_CONFIG_PATH") | tar -xf - -C /host/config_dir &"
     else
         mounts="$mounts -v $CONFIG_VOL:/vol/config:ro -v $HOST_CONFIG_PATH:/host/config"
-        script="$script tar -cf - -C /vol/config . | tar --no-same-owner --no-same-permissions -xf - -C /host/config &"
+        script="$script tar -cf - -C /vol/config . | tar -xf - -C /host/config &"
     fi
     
     # Others
@@ -53,7 +53,7 @@ sync_from_vols() {
         local host_var="HOST_$type"
         local vol_var="${type}_VOL"
         mounts="$mounts -v ${!vol_var}:/vol/${type,,}:ro -v ${!host_var}:/host/${type,,}"
-        script="$script tar -cf - -C /vol/${type,,} . | tar --no-same-owner --no-same-permissions -xf - -C /host/${type,,} &"
+        script="$script tar -cf - -C /vol/${type,,} . | tar -xf - -C /host/${type,,} &"
     done
     
     script="$script wait"
