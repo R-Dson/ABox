@@ -30,6 +30,8 @@ jobs:
   bundle:
     needs: [test]
     runs-on: ubuntu-latest
+    env:
+      ABX_VERSION: ${{ github.run_id }}+${{ github.sha }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

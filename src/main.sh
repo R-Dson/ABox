@@ -19,6 +19,16 @@ source "$SCRIPT_DIR/sync.sh"
 
 TIMESTAMP=$(date +%s)
 
+# --- Version flag handling ---
+if [[ "$1" == "--version" ]] || [[ "$1" == "-v" ]]; then
+    if [[ -n "$ABX_VERSION" ]]; then
+        echo "abx $ABX_VERSION"
+    else
+        echo "abx (dev build)"
+    fi
+    exit 0
+fi
+
 # --- Main Execution ---
 
 if [[ "$1" == "audit" ]]; then

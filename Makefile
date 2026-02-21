@@ -31,6 +31,7 @@ bundle:
 	@echo '# This is a generated file - do not edit directly' >> bin/abx
 	@echo '# Source files are in src/ directory' >> bin/abx
 	@echo '' >> bin/abx
+	@echo 'ABX_VERSION="$(ABX_VERSION)"' >> bin/abx
 	@# Add HOST_UID and HOST_GID definitions (needed for chown)
 	@echo 'HOST_UID=$${HOST_UID:-$$(id -u)}' >> bin/abx
 	@echo 'HOST_GID=$${HOST_GID:-$$(id -g)}' >> bin/abx
