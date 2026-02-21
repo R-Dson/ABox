@@ -46,7 +46,7 @@ bundle:
 	@cat src/sync.sh >> bin/abx
 	@echo '' >> bin/abx
 	@# Strip out the source statements, SCRIPT_DIR, and HOST_UID/GID from main.sh
-	@tail -n +16 src/main.sh | grep -v '^source ' | grep -v 'SCRIPT_DIR=' | grep -v 'HOST_UID=' | grep -v 'HOST_GID=' >> bin/abx
+	@tail -n +9 src/main.sh | grep -v '^source ' | grep -v 'SCRIPT_DIR=' | grep -v 'HOST_UID=' | grep -v 'HOST_GID=' >> bin/abx
 	@chmod +x bin/abx
 	@echo "Bundle created: bin/abx"
 

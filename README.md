@@ -97,6 +97,8 @@ secrets/*.json
 node_modules/
 ```
 
+You can also use `--exclude-url <URL>` (or `--default-exclude-url` to save permanently) to fetch exclusion patterns from a remote URL. URL and local patterns are merged automatically at runtime, with stricter patterns taking priority.
+
 ## Development
 
 Build a specific editor image:

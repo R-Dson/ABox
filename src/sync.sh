@@ -75,7 +75,7 @@ sync_workspace() {
     fi
     
     # Add hardcoded security exclusions
-    patterns+=(".ssh" ".aws" ".env" ".gnupg" "**/.*key" "**/*.pem")
+    patterns+=(".ssh" ".aws" ".env" ".gnupg" "**/*key" "**/*.pem")
     
     if [[ ${#patterns[@]} -eq 0 ]]; then
         # No exclusions - simple tar copy
@@ -117,8 +117,44 @@ sync_workspace() {
 sync_workspace_back() {
     local target_dir="$1"
     local workspace_vol="$2"
+    local exclude_file="$3"
+    local -a patterns=()
+    local include_list=$(mktemp)
+    local raw_list=$(mktemp)
+    local temp_tar=$(mktemp)
     
-    # Stream files back from volume to host using tar
-    $CONTAINER_RUNTIME run --rm --user $HOST_UID:$HOST_GID -v "$workspace_vol:/src" alpine tar -cf - -C /src . | \
-    ( cd "$target_dir" && tar -xf - )
+    # Read exclusion patterns into array
+    if [[ -f "$exclude_file" ]]; then
+        while IFS= read -r pattern; do
+            [[ -n "$pattern" ]] && patterns+=("$pattern")
+        done < <(read_exclusions "$exclude_file")
+    fi
+    
+    # Add hardcoded security exclusions
+    patterns+=(".ssh" ".aws" ".env" ".gnupg" "**/*key" "**/*.pem")
+    
+    # Build list of files to include (not excluded)
+    # 1. Get list of files from volume (run find as root to ensure visibility)
+    $CONTAINER_RUNTIME run --rm -v "$workspace_vol:/src" -w /src alpine find . -type f -print0 2>/dev/null > "$raw_list"
+    
+    # 2. Filter on host
+    while IFS= read -r -d '' path; do
+        # Remove leading ./
+        path="${path#./}"
+        if ! is_excluded "$path" "${patterns[@]}"; then
+            printf '%s\n' "$path"
+        fi
+    done < "$raw_list" > "$include_list"
+    
+    # Stream files back from volume to host using tar, only including filtered files
+    if [[ -s "$include_list" ]]; then
+        $CONTAINER_RUNTIME run --rm -i -v "$workspace_vol:/src" alpine tar -cf - -C /src -T - < "$include_list" > "$temp_tar"
+        if [[ -s "$temp_tar" ]]; then
+            ( cd "$target_dir" && tar -xf "$temp_tar" )
+        fi
+    fi
+    
+    # Cleanup
+    rm -f "$include_list" "$raw_list" "$temp_tar"
 }
+

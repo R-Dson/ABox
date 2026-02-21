@@ -9,8 +9,6 @@ set -o pipefail
 ABX_CONF="$HOME/.config/abx.conf"
 HOST_UID=${HOST_UID:-$(id -u)}
 HOST_GID=${HOST_GID:-$(id -g)}
-TIMESTAMP=$(date +%s)
-
 # Source helper modules
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 source "$SCRIPT_DIR/helpers.sh"
@@ -18,6 +16,8 @@ source "$SCRIPT_DIR/exclusion.sh"
 source "$SCRIPT_DIR/audit.sh"
 source "$SCRIPT_DIR/container.sh"
 source "$SCRIPT_DIR/sync.sh"
+
+TIMESTAMP=$(date +%s)
 
 # --- Main Execution ---
 
@@ -34,6 +34,8 @@ CLI_OFFLINE=false
 CLI_STRICT_NETWORK=false
 CLI_NO_INTERNET=false
 SET_DEFAULT=""
+CLI_EXCLUDE_URL=""
+SET_EXCLUDE_URL=""
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -47,14 +49,25 @@ while [[ $# -gt 0 ]]; do
         --offline)          CLI_OFFLINE=true; shift ;;
         --strict-network)   CLI_STRICT_NETWORK=true; shift ;;
         --no-internet)      CLI_NO_INTERNET=true; shift ;;
+        --exclude-url)      CLI_EXCLUDE_URL="$2"; shift 2 ;;
+        --exclude-url=*)    CLI_EXCLUDE_URL="${1#*=}"; shift ;;
+        --default-exclude-url) SET_EXCLUDE_URL="$2"; shift 2 ;;
+        --default-exclude-url=*) SET_EXCLUDE_URL="${1#*=}"; shift ;;
         *)                  POSITIONAL_ARGS+=("$1"); shift ;;
     esac
 done
 
 if [[ -n "$SET_DEFAULT" ]]; then
     mkdir -p "$(dirname "$ABX_CONF")"
-    echo "EDITOR=$SET_DEFAULT" > "$ABX_CONF"
-    echo "Default editor set to: $SET_DEFAULT"
+    if [[ -n "$SET_EXCLUDE_URL" ]]; then
+        echo "EDITOR=$SET_DEFAULT" > "$ABX_CONF"
+        echo "EXCLUDE_URL=$SET_EXCLUDE_URL" >> "$ABX_CONF"
+        echo "Default editor set to: $SET_DEFAULT"
+        echo "Default exclude URL set to: $SET_EXCLUDE_URL"
+    else
+        echo "EDITOR=$SET_DEFAULT" > "$ABX_CONF"
+        echo "Default editor set to: $SET_DEFAULT"
+    fi
     if [[ ${#POSITIONAL_ARGS[@]} -eq 0 && -z "$CLI_EDITOR" && "$CLI_SHELL" == "false" && "$CLI_IT" == "false" ]]; then
         exit 0
     fi
@@ -69,6 +82,11 @@ if [[ -z "$EDITOR_NAME" && -f "$ABX_CONF" ]]; then
 fi
 [[ -z "$EDITOR_NAME" ]] && EDITOR_NAME="opencode"
 
+EXCLUDE_URL="$CLI_EXCLUDE_URL"
+if [[ -z "$EXCLUDE_URL" && -f "$ABX_CONF" ]]; then
+    EXCLUDE_URL=$(grep "^EXCLUDE_URL=" "$ABX_CONF" | cut -d= -f2)
+fi
+
 CONTAINER_RUNTIME=$(detect_runtime) || exit 1
 IFS='|' read -r IMAGE_NAME COMMAND_NAME CONFIG_REL_PATH ENV_VAR_NAMES LEGACY_PATH <<< "$(get_editor_info "$EDITOR_NAME")"
 
@@ -81,16 +99,42 @@ TARGET_DIR=$(cd "$TARGET_DIR" && pwd)
 
 EXCLUDE_FILE="$TARGET_DIR/.abxignore"
 USE_EXCLUSIONS=false
-if [[ -f "$EXCLUDE_FILE" ]]; then
+TEMP_EXCLUDE_FILE=""
+
+if [[ -f "$EXCLUDE_FILE" ]] || [[ -n "$EXCLUDE_URL" ]]; then
     USE_EXCLUSIONS=true
-else
-    # Automatically trigger Airlock if common secrets are detected
+fi
+
+if [[ -z "$EXCLUDE_FILE" ]] || [[ ! -f "$EXCLUDE_FILE" ]]; then
     for secret in .ssh .aws .env .gnupg; do
         if [[ -e "$TARGET_DIR/$secret" ]]; then
             USE_EXCLUSIONS=true
             break
         fi
     done
+fi
+
+if [[ -n "$EXCLUDE_URL" ]]; then
+    local_patterns=""
+    if [[ -f "$EXCLUDE_FILE" ]]; then
+local_patterns=$(grep -vE '^\s*#' "$EXCLUDE_FILE" | grep -vE '^\s*$')
+    fi
+    
+    url_patterns=$(fetch_exclusions "$EXCLUDE_URL") || exit 1
+    
+    unified_patterns=$(unify_patterns "$local_patterns" "$url_patterns")
+    
+    TEMP_EXCLUDE_FILE=$(mktemp)
+    echo "$unified_patterns" > "$TEMP_EXCLUDE_FILE"
+    EXCLUDE_FILE="$TEMP_EXCLUDE_FILE"
+    
+    trap 'rm -f "$TEMP_EXCLUDE_FILE"' EXIT
+    
+    if [[ -n "$local_patterns" ]]; then
+        echo "Applying unified exclusions (local + $EXCLUDE_URL)..."
+    else
+        echo "Applying exclusions from $EXCLUDE_URL..."
+    fi
 fi
 
 HOST_CONFIG_PATH="$HOME/$CONFIG_REL_PATH"
@@ -104,6 +148,7 @@ mkdir -p "$HOST_CACHE" "$HOST_STATE" "$HOST_SHARE"
 # Initialize and create volumes
 init_volumes "$EDITOR_NAME" "$TIMESTAMP"
 create_volumes "$USE_EXCLUSIONS"
+# Setup cleanup trap to remove volumes on exit
 setup_volume_cleanup "$USE_EXCLUSIONS"
 init_volume_ownership "$USE_EXCLUSIONS"
 
@@ -130,7 +175,8 @@ echo "Syncing changes back to host..."
 sync_from_vols
 if [[ "$USE_EXCLUSIONS" == "true" ]]; then
     echo "Syncing workspace changes back to $TARGET_DIR..."
-    sync_workspace_back "$TARGET_DIR" "$WORKSPACE_VOL"
+    sync_workspace_back "$TARGET_DIR" "$WORKSPACE_VOL" "$EXCLUDE_FILE"
 fi
+
 
 exit $EXIT_CODE
