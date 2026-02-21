@@ -144,12 +144,12 @@ if [ -d "$HOME/.config/opencode" ]; then
     if $CONTAINER_CMD run --rm \
         -v "/tmp/abox-auth-test:/source:ro" \
         -v "abox-test-auth:/dest" \
-        alpine sh -c "cp /source/token /dest/" > /dev/null 2>&1; then
+        --entrypoint sh $IMAGE_NAME -c "cp /source/token /dest/" > /dev/null 2>&1; then
 
         # Verify token was copied
         if $CONTAINER_CMD run --rm \
             -v "abox-test-auth:/dest" \
-            alpine cat /dest/token 2>/dev/null | grep -q "test-token"; then
+            $IMAGE_NAME cat /dest/token 2>/dev/null | grep -q "test-token"; then
             echo -e "  ${GREEN}PASS${NC}: Auth airlock pattern works correctly"
             ((PASS_COUNT++))
         else

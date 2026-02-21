@@ -41,7 +41,6 @@ get_editor_info() {
         gemini)   echo "ghcr.io/r-dson/abox:gemini|gemini|.gemini|GOOGLE_API_KEY|" ;;
         goose)   echo "ghcr.io/r-dson/abox:goose|goose|.config/goose||" ;;
         vibe)   echo "ghcr.io/r-dson/abox:vibe|vibe|.vibe||" ;;
-        alpine) echo "alpine|sh|.config/alpine||" ;;
         opencode|*) echo "ghcr.io/r-dson/abox:opencode|opencode|.config/opencode||.opencode" ;;
     esac
 }

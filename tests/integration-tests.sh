@@ -260,7 +260,7 @@ else
     $CONTAINER_CMD run --rm \
         -v "/tmp/abox-test-auth:/source:ro,z" \
         -v "$TEST_VOL:/dest" \
-        alpine sh -c "cp /source/config.txt /dest/ && echo modified > /dest/config.txt" 2>/dev/null
+        --entrypoint sh $IMAGE_NAME -c "cp /source/config.txt /dest/ && echo modified > /dest/config.txt" 2>/dev/null
 
     if grep -q "original" /tmp/abox-test-auth/config.txt 2>/dev/null; then
         echo -e "${GREEN}PASS${NC}: Host auth config unchanged (airlock working)"
@@ -358,7 +358,7 @@ else
 
     $CONTAINER_CMD run --rm \
         -v "$TEST_VOL:/dest" \
-        alpine sh -c "touch /dest/test_config && chown $HOST_UID:$HOST_GID /dest/test_config"
+        --entrypoint sh $IMAGE_NAME -c "touch /dest/test_config && chown $HOST_UID:$HOST_GID /dest/test_config"
 
     if $CONTAINER_CMD run --rm \
         -e HOST_UID=$HOST_UID \
@@ -395,7 +395,7 @@ else
     $CONTAINER_CMD volume create "$TEST_VOL" > /dev/null
     
     # Populate volume with sandbox files (simulating sandbox creates these)
-    $CONTAINER_CMD run --rm -v "$TEST_VOL:/src" alpine sh -c \
+    $CONTAINER_CMD run --rm -v "$TEST_VOL:/src" --entrypoint sh $IMAGE_NAME -c \
         "echo 'sandbox_secret' > /src/.env && echo 'sandbox_key' > /src/secret.key && echo 'sandbox_safe' > /src/safe.txt && echo 'new_file' > /src/newfile.txt"
     
     # Source exclusion logic and run sync_workspace_back
@@ -466,7 +466,7 @@ touch "$TEST_DIR/.abxignore"
 
 $CONTAINER_CMD volume create "$TEST_VOL" > /dev/null 2>&1
 
-$CONTAINER_CMD run --rm -v "$TEST_VOL:/src" alpine sh -c \
+$CONTAINER_CMD run --rm -v "$TEST_VOL:/src" --entrypoint sh $IMAGE_NAME -c \
     "echo 'sandbox_secret' > /src/.env && echo 'sandbox_key' > /src/secret.key && echo 'sandbox_safe' > /src/safe.txt && echo 'new_file' > /src/newfile.txt"
 
 source src/exclusion.sh

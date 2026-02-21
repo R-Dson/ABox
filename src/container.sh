@@ -199,6 +199,8 @@ init_volume_ownership() {
     fi
     
     $CONTAINER_RUNTIME run --rm \
+        --user 0:0 \
+        --entrypoint sh \
         $vol_mounts \
-        alpine sh -c "chown -R $HOST_UID:$HOST_GID $chown_targets"
+        $IMAGE_NAME -c "chown -R $HOST_UID:$HOST_GID $chown_targets"
 }
