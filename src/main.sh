@@ -22,9 +22,9 @@ TIMESTAMP=$(date +%s)
 # --- Version flag handling ---
 if [[ "$1" == "--version" ]] || [[ "$1" == "-v" ]]; then
     if [[ -n "$ABX_VERSION" ]]; then
-        echo "abx $ABX_VERSION"
+        echo "$ABX_VERSION"
     else
-        echo "abx (dev build)"
+        echo "(dev build)"
     fi
     exit 0
 fi
