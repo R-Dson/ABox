@@ -36,7 +36,7 @@
       "cmd_name": "codex"
     },
     "gemini": {
-      "version": "0.30.1",
+      "version": "0.31.0",
       "install_cmd": "npm install -g @google/gemini-cli@{version}",
       "cmd_name": "gemini"
     },
