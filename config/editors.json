@@ -6,7 +6,7 @@
       "cmd_name": "opencode"
     },
     "claude": {
-      "version": "2.1.68",
+      "version": "2.1.69",
       "install_cmd": "npm install -g @anthropic-ai/claude-code@{version}",
       "cmd_name": "claude"
     },
@@ -26,7 +26,7 @@
       "cmd_name": "vibe"
     },
     "goose": {
-      "version": "1.26.2",
+      "version": "1.27.0",
       "install_cmd": "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | GOOSE_VERSION={version} CONFIGURE=false bash",
       "cmd_name": "goose"
     },
