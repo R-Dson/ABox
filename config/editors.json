@@ -16,12 +16,12 @@
       "cmd_name": "aider"
     },
     "copilot": {
-      "version": "1.0.10",
+      "version": "1.0.11",
       "install_cmd": "npm install -g @github/copilot@{version}",
       "cmd_name": "copilot"
     },
     "vibe": {
-      "version": "2.6.0",
+      "version": "2.6.1",
       "install_cmd": "uv tool install mistral-vibe@{version}",
       "cmd_name": "vibe"
     },
