@@ -1,12 +1,12 @@
 {
   "editors": {
     "opencode": {
-      "version": "1.3.4",
+      "version": "1.3.5",
       "install_cmd": "npm install -g opencode-ai@{version}",
       "cmd_name": "opencode"
     },
     "claude": {
-      "version": "2.1.86",
+      "version": "2.1.87",
       "install_cmd": "npm install -g @anthropic-ai/claude-code@{version}",
       "cmd_name": "claude"
     },
