@@ -21,12 +21,12 @@
       "cmd_name": "copilot"
     },
     "vibe": {
-      "version": "2.7.2",
+      "version": "2.7.3",
       "install_cmd": "uv tool install mistral-vibe@{version}",
       "cmd_name": "vibe"
     },
     "goose": {
-      "version": "1.29.0",
+      "version": "1.29.1",
       "install_cmd": "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | GOOSE_VERSION={version} CONFIGURE=false bash",
       "cmd_name": "goose"
     },
