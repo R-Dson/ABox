@@ -21,7 +21,7 @@
       "cmd_name": "copilot"
     },
     "vibe": {
-      "version": "2.7.4",
+      "version": "2.7.5",
       "install_cmd": "uv tool install mistral-vibe@{version}",
       "cmd_name": "vibe"
     },
