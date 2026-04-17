@@ -6,7 +6,7 @@
       "cmd_name": "opencode"
     },
     "claude": {
-      "version": "2.1.112",
+      "version": "2.1.113",
       "install_cmd": "npm install -g @anthropic-ai/claude-code@{version}",
       "cmd_name": "claude"
     },
@@ -36,7 +36,7 @@
       "cmd_name": "codex"
     },
     "gemini": {
-      "version": "0.38.1",
+      "version": "0.38.2",
       "install_cmd": "npm install -g @google/gemini-cli@{version}",
       "cmd_name": "gemini"
     },
