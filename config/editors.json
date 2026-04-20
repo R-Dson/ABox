@@ -16,7 +16,7 @@
       "cmd_name": "aider"
     },
     "copilot": {
-      "version": "1.0.33",
+      "version": "1.0.34",
       "install_cmd": "npm install -g @github/copilot@{version}",
       "cmd_name": "copilot"
     },
@@ -31,7 +31,7 @@
       "cmd_name": "goose"
     },
     "codex": {
-      "version": "0.121.0",
+      "version": "0.122.0",
       "install_cmd": "npm i -g @openai/codex@{version}",
       "cmd_name": "codex"
     },
