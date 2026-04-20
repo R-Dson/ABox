@@ -1,7 +1,7 @@
 {
   "editors": {
     "opencode": {
-      "version": "1.14.18",
+      "version": "1.14.19",
       "install_cmd": "npm install -g opencode-ai@{version}",
       "cmd_name": "opencode"
     },
@@ -26,7 +26,7 @@
       "cmd_name": "vibe"
     },
     "goose": {
-      "version": "1.31.0",
+      "version": "1.31.1",
       "install_cmd": "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | GOOSE_VERSION={version} CONFIGURE=false bash",
       "cmd_name": "goose"
     },
