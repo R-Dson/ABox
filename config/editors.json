@@ -1,7 +1,7 @@
 {
   "editors": {
     "opencode": {
-      "version": "1.14.21",
+      "version": "1.14.22",
       "install_cmd": "npm install -g opencode-ai@{version}",
       "cmd_name": "opencode"
     },
