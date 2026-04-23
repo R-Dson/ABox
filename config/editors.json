@@ -6,7 +6,7 @@
       "cmd_name": "opencode"
     },
     "claude": {
-      "version": "2.1.118",
+      "version": "2.1.119",
       "install_cmd": "npm install -g @anthropic-ai/claude-code@{version}",
       "cmd_name": "claude"
     },
@@ -16,7 +16,7 @@
       "cmd_name": "aider"
     },
     "copilot": {
-      "version": "1.0.34",
+      "version": "1.0.35",
       "install_cmd": "npm install -g @github/copilot@{version}",
       "cmd_name": "copilot"
     },
