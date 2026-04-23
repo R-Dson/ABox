@@ -6,7 +6,7 @@
       "cmd_name": "opencode"
     },
     "claude": {
-      "version": "2.1.117",
+      "version": "2.1.118",
       "install_cmd": "npm install -g @anthropic-ai/claude-code@{version}",
       "cmd_name": "claude"
     },
@@ -31,7 +31,7 @@
       "cmd_name": "goose"
     },
     "codex": {
-      "version": "0.122.0",
+      "version": "0.123.0",
       "install_cmd": "npm i -g @openai/codex@{version}",
       "cmd_name": "codex"
     },
