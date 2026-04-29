@@ -26,7 +26,7 @@
       "cmd_name": "vibe"
     },
     "goose": {
-      "version": "1.32.0",
+      "version": "1.33.1",
       "install_cmd": "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | GOOSE_VERSION={version} CONFIGURE=false bash",
       "cmd_name": "goose"
     },
