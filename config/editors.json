@@ -1,7 +1,7 @@
 {
   "editors": {
     "opencode": {
-      "version": "1.15.5",
+      "version": "1.15.6",
       "install_cmd": "npm install -g opencode-ai@{version}",
       "cmd_name": "opencode"
     },
@@ -16,7 +16,7 @@
       "cmd_name": "aider"
     },
     "copilot": {
-      "version": "1.0.50",
+      "version": "1.0.51",
       "install_cmd": "npm install -g @github/copilot@{version}",
       "cmd_name": "copilot"
     },
