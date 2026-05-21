@@ -6,7 +6,7 @@
       "cmd_name": "opencode"
     },
     "claude": {
-      "version": "2.1.145",
+      "version": "2.1.146",
       "install_cmd": "npm install -g @anthropic-ai/claude-code@{version}",
       "cmd_name": "claude"
     },
