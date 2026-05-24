@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/r-dson/abox/internal/exclusion"
 	"github.com/r-dson/abox/internal/runtime"
 )
 
@@ -155,6 +156,76 @@ func TarDir(dir string, w io.Writer) error {
 		f, err := os.Open(path)
 		if err != nil {
 			return fmt.Errorf("open file: %w", err)
+		}
+		defer f.Close()
+
+		if _, err := io.Copy(tw, f); err != nil {
+			return fmt.Errorf("copy file content: %w", err)
+		}
+
+		return nil
+	}); err != nil {
+		return fmt.Errorf("walking directory: %w", err)
+	}
+	return nil
+}
+
+// TarFiltered writes a tar archive of the directory contents to the writer,
+// excluding files and directories that match the exclusion patterns.
+// If matcher is nil, all files are included (equivalent to TarDir).
+func TarFiltered(dir string, w io.Writer, matcher *exclusion.Matcher) error {
+	if matcher == nil {
+		return TarDir(dir, w)
+	}
+
+	tw := tar.NewWriter(w)
+	defer tw.Close()
+
+	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		rel, relErr := filepath.Rel(dir, path)
+		if relErr != nil {
+			return fmt.Errorf("relative path: %w", relErr)
+		}
+		rel = filepath.ToSlash(rel)
+
+		// Skip the root directory itself
+		if rel == "." {
+			return nil
+		}
+
+		if matcher.Match(rel) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		info, infoErr := d.Info()
+		if infoErr != nil {
+			return fmt.Errorf("file info: %w", infoErr)
+		}
+
+		header, hErr := tar.FileInfoHeader(info, "")
+		if hErr != nil {
+			return fmt.Errorf("tar header: %w", hErr)
+		}
+		header.Name = rel
+
+		if err := tw.WriteHeader(header); err != nil {
+			return fmt.Errorf("write header: %w", err)
+		}
+
+		f, openErr := os.Open(path)
+		if openErr != nil {
+			return fmt.Errorf("open file: %w", openErr)
 		}
 		defer f.Close()
 
