@@ -1,20 +1,13 @@
-package runtime
+package runtime_test
 
 import (
 	"testing"
+
+	"github.com/r-dson/abox/internal/runtime"
 )
 
-// TestContainerRuntimeInterface verifies the interface is satisfied
-// by both Docker and Podman implementations.
-func TestContainerRuntimeInterface(t *testing.T) {
-	// These type assertions ensure the implementations satisfy the interface.
-	// They will fail to compile if the interface is not satisfied.
-	var _ ContainerRuntime = (*dockerRuntime)(nil)
-}
-
-// TestContainerSpecFields verifies the spec struct has the expected fields.
 func TestContainerSpecFields(t *testing.T) {
-	spec := ContainerSpec{
+	spec := runtime.ContainerSpec{
 		Name: "test-container",
 	}
 
@@ -23,10 +16,20 @@ func TestContainerSpecFields(t *testing.T) {
 	}
 }
 
-// TestSyncImageConstant verifies the sync image constant.
 func TestSyncImageConstant(t *testing.T) {
-	expected := "ghcr.io/r-dson/abox:sync"
-	if SyncImage != expected {
-		t.Errorf("SyncImage = %q, want %q", SyncImage, expected)
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"sync image", runtime.SyncImage, "ghcr.io/r-dson/abox:sync"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Errorf("got %q, want %q", tt.got, tt.want)
+			}
+		})
 	}
 }

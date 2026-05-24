@@ -20,7 +20,7 @@ type EditorProfile struct {
 	ImageTag   string   `json:"image_tag"`
 	ConfigPath string   `json:"config_path"`
 	EnvVars    []string `json:"env_vars"`
-	LegacyPath string   `json:"legacy_path"`
+	LegacyPath string   `json:"legacy_path,omitzero"`
 }
 
 // CachePath returns the derived cache directory for this editor.

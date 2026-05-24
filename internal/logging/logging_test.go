@@ -1,22 +1,22 @@
-package logging
+package logging_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/r-dson/abox/internal/logging"
 )
 
-func TestSetup_DefaultLogPath(t *testing.T) {
+func TestSetup_VerboseCreatesLogFile(t *testing.T) {
 	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", os.Getenv("HOMEOLD"))
+	defer os.Setenv("HOME", origHome)
 
-	// Verbose should create the log file
-	Setup(true, false)
+	logging.Setup(true, false)
 
-	logDir := filepath.Join(tmpHome, ".local", "state", "abx")
-	logFile := filepath.Join(logDir, "abx.log")
-
+	logFile := filepath.Join(tmpHome, ".local", "state", "abx", "abx.log")
 	info, err := os.Stat(logFile)
 	if err != nil {
 		t.Fatalf("verbose log file not created at %s: %v", logFile, err)
@@ -32,7 +32,7 @@ func TestSetup_NonVerboseNoFile(t *testing.T) {
 	os.Setenv("HOME", tmpHome)
 	defer os.Setenv("HOME", origHome)
 
-	Setup(false, false)
+	logging.Setup(false, false)
 
 	logFile := filepath.Join(tmpHome, ".local", "state", "abx", "abx.log")
 	if _, err := os.Stat(logFile); err == nil {
