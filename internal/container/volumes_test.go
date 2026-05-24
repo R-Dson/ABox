@@ -74,10 +74,11 @@ func TestNewSession_CleanupOnError(t *testing.T) {
 	}
 }
 
-// volumeTrackingRuntime extends stubRuntime with volume creation tracking.
+// volumeTrackingRuntime extends stubRuntime with volume and network tracking.
 type volumeTrackingRuntime struct {
 	stubRuntime
-	onVolumeCreate func(name string, labels map[string]string) error
+	onVolumeCreate  func(name string, labels map[string]string) error
+	onNetworkCreate func(name string, internal bool) (string, error)
 }
 
 func (v *volumeTrackingRuntime) VolumeCreate(_ context.Context, name string, labels map[string]string) error {
@@ -85,6 +86,13 @@ func (v *volumeTrackingRuntime) VolumeCreate(_ context.Context, name string, lab
 		return v.onVolumeCreate(name, labels)
 	}
 	return nil
+}
+
+func (v *volumeTrackingRuntime) NetworkCreate(_ context.Context, name string, internal bool) (string, error) {
+	if v.onNetworkCreate != nil {
+		return v.onNetworkCreate(name, internal)
+	}
+	return "", nil
 }
 
 var errTestFailed = errTestFailedType{}
