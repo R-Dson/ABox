@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"io"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -117,19 +116,5 @@ func TestTarDir_PreservesPermissions(t *testing.T) {
 
 	if h.Mode != 0o755 {
 		t.Errorf("permissions = %04o, want 0755", h.Mode)
-	}
-}
-
-func mustWriteFile(t *testing.T, path string, data []byte, perm os.FileMode) {
-	t.Helper()
-	if err := os.WriteFile(path, data, perm); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
-}
-
-func mustMkdirAll(t *testing.T, path string) {
-	t.Helper()
-	if err := os.MkdirAll(path, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", path, err)
 	}
 }
