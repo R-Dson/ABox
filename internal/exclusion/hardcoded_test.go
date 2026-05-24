@@ -1,0 +1,47 @@
+package exclusion_test
+
+import (
+	"testing"
+
+	"github.com/bmatcuk/doublestar/v4"
+	"github.com/r-dson/abox/internal/exclusion"
+)
+
+func TestHardcodedPatterns(t *testing.T) {
+	patterns := exclusion.HardcodedPatterns()
+	if len(patterns) == 0 {
+		t.Fatal("HardcodedPatterns() returned empty list")
+	}
+
+	tests := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{"ssh dir", ".ssh", true},
+		{"ssh key", ".ssh/id_rsa", true},
+		{"aws dir", ".aws", true},
+		{"aws creds", ".aws/credentials", true},
+		{"env file", ".env", true},
+		{"pem file", "server.pem", true},
+		{"nested key", "secrets/prod.key", true},
+		{"gnupg dir", ".gnupg", true},
+		{"normal code", "main.go", false},
+		{"src dir", "src/lib/util.rs", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			matched := false
+			for _, p := range patterns {
+				if ok, _ := doublestar.Match(p, tt.path); ok {
+					matched = true
+					break
+				}
+			}
+			if matched != tt.want {
+				t.Errorf("path %q matched=%v, want %v", tt.path, matched, tt.want)
+			}
+		})
+	}
+}
