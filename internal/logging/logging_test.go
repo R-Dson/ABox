@@ -39,3 +39,27 @@ func TestSetup_NonVerboseNoFile(t *testing.T) {
 		t.Error("log file should not be created when verbose=false")
 	}
 }
+
+func TestSetup_JSONOutput(t *testing.T) {
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	// Should not panic when jsonOutput=true
+	logging.Setup(false, true)
+}
+
+func TestSetup_VerboseAndJSON(t *testing.T) {
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	logging.Setup(true, true)
+
+	logFile := filepath.Join(tmpHome, ".local", "state", "abx", "abx.log")
+	if _, err := os.Stat(logFile); err != nil {
+		t.Error("log file should exist when verbose=true even with json=true")
+	}
+}
