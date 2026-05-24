@@ -7,6 +7,7 @@ set -e
 REPO="R-Dson/ABox"
 BINARY_NAME="abx"
 RELEASE_URL="https://github.com/$REPO/releases/latest/download/$BINARY_NAME"
+JSON_URL="https://github.com/$REPO/releases/latest/download/editors.json"
 
 echo "ABox Installation"
 echo "-------------------"
@@ -53,6 +54,30 @@ if ! curl -fsSL "$RELEASE_URL" -o "$BINARY_NAME"; then
     exit 1
 fi
 
+# Download editors.json
+echo "Downloading editor registry..."
+if ! curl -fsSL "$JSON_URL" -o "editors.json"; then
+    echo "Warning: Failed to download editors.json. Editor list may be incomplete."
+fi
+
+# Verify SHA-256 checksums
+echo "Verifying integrity..."
+CHECKSUM_URL="${RELEASE_URL}.sha256"
+JSON_CHECKSUM_URL="${JSON_URL}.sha256"
+
+if curl -fsSL "$CHECKSUM_URL" -o "${BINARY_NAME}.sha256" 2>/dev/null; then
+    if ! sha256sum --check "${BINARY_NAME}.sha256" --status 2>/dev/null; then
+        echo "Error: SHA-256 verification failed for $BINARY_NAME."
+        echo "The download may be corrupted or tampered with."
+        rm -f "$BINARY_NAME" "${BINARY_NAME}.sha256" editors.json
+        exit 1
+    fi
+    rm -f "${BINARY_NAME}.sha256"
+    echo "Integrity verified."
+else
+    echo "Warning: Checksum not available. Skipping integrity verification."
+fi
+
 # Make executable
 chmod +x "$BINARY_NAME"
 
@@ -67,6 +92,18 @@ if [ "$USE_SUDO" = true ]; then
     fi
 else
     mv "$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+fi
+
+# Install editors.json alongside the binary
+SHARE_DIR="$(dirname "$INSTALL_DIR")/share/abx"
+if [ -f "editors.json" ]; then
+    mkdir -p "$SHARE_DIR"
+    if [ "$USE_SUDO" = true ] && [ ! -w "$SHARE_DIR" ]; then
+        sudo cp editors.json "$SHARE_DIR/editors.json"
+    else
+        cp editors.json "$SHARE_DIR/editors.json"
+    fi
+    rm -f editors.json
 fi
 
 echo "ABox has been installed successfully!"
