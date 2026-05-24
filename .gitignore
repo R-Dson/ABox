@@ -1,7 +1,8 @@
 # Build artifacts
 build/
-bin/abx
+bin/*
 *.x.c
+abx
 
 # Editor-specific
 .vscode/

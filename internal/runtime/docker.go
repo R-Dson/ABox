@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -191,7 +192,9 @@ func (d *dockerRuntime) ImagePull(ctx context.Context, ref string, out io.Writer
 }
 
 func (d *dockerRuntime) ImageExists(ctx context.Context, ref string) (bool, error) {
-	_, err := d.client.ImageInspect(ctx, ref)
+	var buf bytes.Buffer
+	_, err := d.client.ImageInspect(ctx, ref, dockerclient.ImageInspectWithRawResponse(&buf))
+	//_, _, err := d.client.ImageInspectWithRaw(ctx, ref)
 	if err != nil {
 		if cerrdefs.IsNotFound(err) {
 			return false, nil
