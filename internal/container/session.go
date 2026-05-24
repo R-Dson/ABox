@@ -38,22 +38,22 @@ func NewSession(id string, rt runtime.ContainerRuntime, vols SessionVolumes) *Se
 }
 
 // ConfigVol returns the config volume name.
-func (s *Session) ConfigVol() string    { return s.volumes.ConfigVol }
+func (s *Session) ConfigVol() string { return s.volumes.ConfigVol }
 
 // CacheVol returns the cache volume name.
-func (s *Session) CacheVol() string     { return s.volumes.CacheVol }
+func (s *Session) CacheVol() string { return s.volumes.CacheVol }
 
 // StateVol returns the state volume name.
-func (s *Session) StateVol() string     { return s.volumes.StateVol }
+func (s *Session) StateVol() string { return s.volumes.StateVol }
 
 // ShareVol returns the share volume name.
-func (s *Session) ShareVol() string     { return s.volumes.ShareVol }
+func (s *Session) ShareVol() string { return s.volumes.ShareVol }
 
 // WorkspaceVol returns the workspace volume name (empty if exclusions not active).
 func (s *Session) WorkspaceVol() string { return s.volumes.WorkspaceVol }
 
 // NetworkID returns the strict network ID (empty if not using strict networking).
-func (s *Session) NetworkID() string    { return s.volumes.NetworkID }
+func (s *Session) NetworkID() string { return s.volumes.NetworkID }
 
 // VolumeNames returns all non-empty volume names for this session.
 func (v *SessionVolumes) nonEmptyNames() []string {

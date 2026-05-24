@@ -11,7 +11,7 @@ import (
 
 // NewPodman creates a runtime connected to the Podman socket.
 // Podman's REST API is Docker-compatible, so we reuse the Docker client.
-func NewPodman(ctx context.Context) (*dockerRuntime, error) {
+func NewPodman(ctx context.Context) (ContainerRuntime, error) {
 	sock := podmanSocket()
 	cli, err := dockerclient.NewClientWithOpts(
 		dockerclient.WithHost("unix://"+sock),
@@ -35,5 +35,5 @@ func podmanSocket() string {
 
 func pingWithClient(ctx context.Context, cli *dockerclient.Client) error {
 	_, err := cli.Ping(ctx)
-	return err
+	return fmt.Errorf("podman ping: %w", err)
 }

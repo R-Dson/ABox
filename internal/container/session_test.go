@@ -12,7 +12,7 @@ import (
 func TestSession_CleanupRemovesVolumes(t *testing.T) {
 	removedVolumes := []string{}
 	mock := &stubRuntime{
-		onVolumeRemove: func(name string, force bool) error {
+		onVolumeRemove: func(name string, _ bool) error {
 			removedVolumes = append(removedVolumes, name)
 			return nil
 		},
@@ -62,7 +62,7 @@ func TestSession_CleanupRemovesNetwork(t *testing.T) {
 			}
 			return nil
 		},
-		onVolumeRemove: func(name string, force bool) error { return nil },
+		onVolumeRemove: func(string, bool) error { return nil },
 	}
 
 	sess := container.NewSession("test-456", mock,
@@ -80,11 +80,11 @@ func TestSession_CleanupSkipsEmptyFields(t *testing.T) {
 	removedVolumes := []string{}
 	networkRemoved := false
 	mock := &stubRuntime{
-		onVolumeRemove: func(name string, force bool) error {
+		onVolumeRemove: func(name string, _ bool) error {
 			removedVolumes = append(removedVolumes, name)
 			return nil
 		},
-		onNetworkRemove: func(id string) error {
+		onNetworkRemove: func(string) error {
 			networkRemoved = true
 			return nil
 		},
@@ -121,14 +121,18 @@ type stubRuntime struct {
 	onNetworkRemove func(id string) error
 }
 
-func (s *stubRuntime) VolumeCreate(_ context.Context, _ string, _ map[string]string) error { return nil }
+func (s *stubRuntime) VolumeCreate(_ context.Context, _ string, _ map[string]string) error {
+	return nil
+}
 func (s *stubRuntime) VolumeRemove(_ context.Context, name string, force bool) error {
 	if s.onVolumeRemove != nil {
 		return s.onVolumeRemove(name, force)
 	}
 	return nil
 }
-func (s *stubRuntime) NetworkCreate(_ context.Context, _ string, _ bool) (string, error) { return "", nil }
+func (s *stubRuntime) NetworkCreate(_ context.Context, _ string, _ bool) (string, error) {
+	return "", nil
+}
 func (s *stubRuntime) NetworkRemove(_ context.Context, id string) error {
 	if s.onNetworkRemove != nil {
 		return s.onNetworkRemove(id)
@@ -138,8 +142,8 @@ func (s *stubRuntime) NetworkRemove(_ context.Context, id string) error {
 func (s *stubRuntime) ContainerCreate(_ context.Context, _ runtime.ContainerSpec) (string, error) {
 	return "", nil
 }
-func (s *stubRuntime) ContainerStart(_ context.Context, _ string) error      { return nil }
-func (s *stubRuntime) ContainerWait(_ context.Context, _ string) (int64, error) { return 0, nil }
+func (s *stubRuntime) ContainerStart(_ context.Context, _ string) error          { return nil }
+func (s *stubRuntime) ContainerWait(_ context.Context, _ string) (int64, error)  { return 0, nil }
 func (s *stubRuntime) ContainerRemove(_ context.Context, _ string, _ bool) error { return nil }
 func (s *stubRuntime) ContainerAttach(_ context.Context, _ string) (io.ReadWriteCloser, error) {
 	return nil, nil

@@ -4,8 +4,10 @@ import (
 	"os"
 	"sync"
 
-	"github.com/r-dson/abox/internal/config"
 	_ "embed"
+
+	"github.com/r-dson/abox/internal/config"
+	"github.com/r-dson/abox/internal/runtime"
 )
 
 //go:embed testdata/seccomp.json
@@ -18,7 +20,7 @@ var seccompPath = sync.OnceValue(func() string {
 	if err != nil {
 		return ""
 	}
-	f.Write(seccompProfile)
+	_, _ = f.Write(seccompProfile)
 	f.Close()
 	return f.Name()
 })
@@ -30,8 +32,8 @@ func SeccompProfilePath() string {
 
 // BuildSpec creates a ContainerSpec from profile, session, and config.
 // This replaces the string-building functions in container.sh.
-func BuildSpec(profile config.EditorProfile, sess *Session, workdir string, cfg *config.Config) ContainerSpec {
-	spec := ContainerSpec{
+func BuildSpec(profile config.EditorProfile, sess *Session, workdir string, cfg *config.Config) Spec {
+	spec := Spec{
 		Image:       profile.ImageTag,
 		Cmd:         []string{profile.CmdName},
 		Env:         buildEnv(profile),
@@ -58,23 +60,5 @@ func BuildSpec(profile config.EditorProfile, sess *Session, workdir string, cfg 
 	return spec
 }
 
-// ContainerSpec is the container creation specification.
-// Re-exports runtime.ContainerSpec to avoid circular imports within the package.
-type ContainerSpec = struct {
-	Name        string
-	Image       string
-	Cmd         []string
-	Env         []string
-	User        string
-	WorkingDir  string
-	Tty         bool
-	OpenStdin   bool
-	Binds       []string
-	CapDrop     []string
-	CapAdd      []string
-	SecurityOpt []string
-	NetworkMode string
-	AutoRemove  bool
-	Memory      int64
-	NanoCPUs    int64
-}
+// Spec is the container creation specification.
+type Spec = runtime.ContainerSpec

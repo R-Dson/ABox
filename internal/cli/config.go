@@ -6,9 +6,9 @@ func newConfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Manage abx configuration",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
-		},
+	}
+	cmd.RunE = func(*cobra.Command, []string) error {
+		return cmd.Help()
 	}
 	return cmd
 }

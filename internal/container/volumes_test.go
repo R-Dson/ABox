@@ -54,7 +54,7 @@ func TestNewSession_CreatesAllVolumes(t *testing.T) {
 func TestNewSession_CleanupOnError(t *testing.T) {
 	callCount := 0
 	mock := &volumeTrackingRuntime{
-		onVolumeCreate: func(name string, _ map[string]string) error {
+		onVolumeCreate: func(string, map[string]string) error {
 			callCount++
 			if callCount == 2 {
 				return errTestFailed

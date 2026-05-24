@@ -7,7 +7,7 @@ func newAuditCmd() *cobra.Command {
 		Use:   "audit [directory]",
 		Short: "Pre-run workspace security check",
 		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil
 		},
 	}

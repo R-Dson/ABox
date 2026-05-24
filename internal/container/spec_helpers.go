@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/r-dson/abox/internal/config"
 	"github.com/docker/go-units"
+	"github.com/r-dson/abox/internal/config"
 )
 
 func buildEnv(profile config.EditorProfile) []string {
@@ -31,7 +31,7 @@ func buildEnv(profile config.EditorProfile) []string {
 	return env
 }
 
-func buildBinds(profile config.EditorProfile, sess *Session, workdir string) []string {
+func buildBinds(_ config.EditorProfile, sess *Session, workdir string) []string {
 	home := config.HomeDir()
 	var binds []string
 

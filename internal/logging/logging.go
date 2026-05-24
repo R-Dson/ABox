@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -75,7 +76,7 @@ func (m *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
 func (m *multiHandler) Handle(ctx context.Context, r slog.Record) error {
 	for _, h := range m.handlers {
 		if err := h.Handle(ctx, r); err != nil {
-			return err
+			return fmt.Errorf("multi-handler: %w", err)
 		}
 	}
 	return nil

@@ -24,7 +24,7 @@ func SnapshotMtimes(dirs []string) (*MtimeSnapshot, error) {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			continue
 		}
-		filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return nil
 			}

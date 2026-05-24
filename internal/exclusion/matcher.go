@@ -64,7 +64,7 @@ func loadLocalIgnore(workdir string) ([]string, error) {
 	path := filepath.Join(workdir, ".abxignore")
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("opening ignore file: %w", err)
 	}
 	defer f.Close()
 
@@ -77,10 +77,13 @@ func loadLocalIgnore(workdir string) ([]string, error) {
 		}
 		patterns = append(patterns, line)
 	}
-	return patterns, scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("reading ignore file: %w", err)
+	}
+	return patterns, nil
 }
 
-func fetchRemotePatterns(_ context.Context, url string) ([]string, error) {
+func fetchRemotePatterns(_ context.Context, _ string) ([]string, error) {
 	// TODO: implement HTTP fetch in a later task
 	return nil, fmt.Errorf("remote pattern fetch not yet implemented")
 }

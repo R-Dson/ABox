@@ -1,0 +1,76 @@
+{
+  "editors": {
+    "opencode": {
+      "version": "1.15.10",
+      "install_cmd": "npm install -g opencode-ai@{version}",
+      "cmd_name": "opencode",
+      "image_tag": "ghcr.io/r-dson/abox:opencode",
+      "config_path": ".config/opencode",
+      "env_vars": [],
+      "legacy_path": ".opencode"
+    },
+    "claude": {
+      "version": "2.1.150",
+      "install_cmd": "npm install -g @anthropic-ai/claude-code@{version}",
+      "cmd_name": "claude",
+      "image_tag": "ghcr.io/r-dson/abox:claude",
+      "config_path": ".claude",
+      "env_vars": ["ANTHROPIC_API_KEY"],
+      "legacy_path": ""
+    },
+    "aider": {
+      "version": "0.86.2",
+      "install_cmd": "uv tool install aider-chat@{version}",
+      "cmd_name": "aider",
+      "image_tag": "ghcr.io/r-dson/abox:aider",
+      "config_path": ".aider.conf.yml",
+      "env_vars": ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"],
+      "legacy_path": ""
+    },
+    "copilot": {
+      "version": "1.0.51",
+      "install_cmd": "npm install -g @github/copilot@{version}",
+      "cmd_name": "copilot",
+      "image_tag": "ghcr.io/r-dson/abox:copilot",
+      "config_path": ".copilot",
+      "env_vars": ["GITHUB_TOKEN"],
+      "legacy_path": ""
+    },
+    "vibe": {
+      "version": "2.10.1",
+      "install_cmd": "uv tool install mistral-vibe@{version}",
+      "cmd_name": "vibe",
+      "image_tag": "ghcr.io/r-dson/abox:vibe",
+      "config_path": ".vibe",
+      "env_vars": [],
+      "legacy_path": ""
+    },
+    "goose": {
+      "version": "1.35.0",
+      "install_cmd": "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | GOOSE_VERSION={version} CONFIGURE=false bash",
+      "cmd_name": "goose",
+      "image_tag": "ghcr.io/r-dson/abox:goose",
+      "config_path": ".config/goose",
+      "env_vars": [],
+      "legacy_path": ""
+    },
+    "codex": {
+      "version": "0.133.0",
+      "install_cmd": "npm i -g @openai/codex@{version}",
+      "cmd_name": "codex",
+      "image_tag": "ghcr.io/r-dson/abox:codex",
+      "config_path": ".codex",
+      "env_vars": [],
+      "legacy_path": ""
+    },
+    "gemini": {
+      "version": "0.43.0",
+      "install_cmd": "npm install -g @google/gemini-cli@{version}",
+      "cmd_name": "gemini",
+      "image_tag": "ghcr.io/r-dson/abox:gemini",
+      "config_path": ".gemini",
+      "env_vars": ["GOOGLE_API_KEY"],
+      "legacy_path": ""
+    }
+  }
+}

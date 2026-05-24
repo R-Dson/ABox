@@ -15,7 +15,7 @@ func TestCreateSession_StrictNetwork(t *testing.T) {
 			onVolumeRemove: func(string, bool) error { return nil },
 		},
 		onVolumeCreate: func(string, map[string]string) error { return nil },
-		onNetworkCreate: func(name string, internal bool) (string, error) {
+		onNetworkCreate: func(_ string, internal bool) (string, error) {
 			createdInternal = internal
 			return "net-strict-123", nil
 		},
@@ -74,10 +74,10 @@ func TestCreateSession_NoNetworkByDefault(t *testing.T) {
 
 func TestResolveNetworkMode(t *testing.T) {
 	tests := []struct {
-		name   string
-		cfg    config.Config
-		sess   *container.Session
-		want   string
+		name string
+		cfg  config.Config
+		sess *container.Session
+		want string
 	}{
 		{
 			name: "no internet returns none",

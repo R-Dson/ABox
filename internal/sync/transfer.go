@@ -39,7 +39,9 @@ func (s *Syncer) SyncIn(ctx context.Context, srcDir, volumeName, dstPath string)
 	pr, pw := io.Pipe()
 	go func() {
 		defer pw.Close()
-		tarDir(srcDir, pw)
+		if err := tarDir(srcDir, pw); err != nil {
+			slog.WarnContext(ctx, "tar creation failed", "error", err)
+		}
 	}()
 
 	stagingPath := dstPath + ".abx-tmp"
@@ -74,12 +76,12 @@ func (s *Syncer) mountVolumeContainer(ctx context.Context, volumeName string) (s
 	}
 
 	if err := s.rt.ContainerStart(ctx, id); err != nil {
-		s.rt.ContainerRemove(ctx, id, true)
+		_ = s.rt.ContainerRemove(ctx, id, true)
 		return "", nil, fmt.Errorf("starting sync container: %w", err)
 	}
 
 	cleanup := func() {
-		s.rt.ContainerRemove(context.Background(), id, true)
+		_ = s.rt.ContainerRemove(context.Background(), id, true)
 	}
 
 	return id, cleanup, nil
@@ -87,7 +89,7 @@ func (s *Syncer) mountVolumeContainer(ctx context.Context, volumeName string) (s
 
 // tarDir writes a tar archive of the directory to the writer.
 // This is a placeholder — the full implementation uses archive/tar.
-func tarDir(dir string, w io.Writer) error {
+func tarDir(_ string, _ io.Writer) error {
 	// TODO: implement with archive/tar in Task 4.2
 	return nil
 }

@@ -10,10 +10,24 @@ import (
 	syncpkg "github.com/r-dson/abox/internal/sync"
 )
 
+func helperWriteFile(t *testing.T, path string, data []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func helperMkdirAll(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", path, err)
+	}
+}
+
 func TestSnapshotMtimes(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "test.txt")
-	os.WriteFile(file, []byte("hello"), 0o644)
+	helperWriteFile(t, file, []byte("hello"))
 
 	snap, err := syncpkg.SnapshotMtimes([]string{dir})
 	if err != nil {
@@ -27,7 +41,7 @@ func TestSnapshotMtimes(t *testing.T) {
 func TestDetectConflicts_NoChanges(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "stable.txt")
-	os.WriteFile(file, []byte("unchanged"), 0o644)
+	helperWriteFile(t, file, []byte("unchanged"))
 
 	snap, _ := syncpkg.SnapshotMtimes([]string{dir})
 	conflicts := snap.DetectConflicts()
@@ -40,13 +54,13 @@ func TestDetectConflicts_NoChanges(t *testing.T) {
 func TestDetectConflicts_FileModified(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "changed.txt")
-	os.WriteFile(file, []byte("original"), 0o644)
+	helperWriteFile(t, file, []byte("original"))
 
 	snap, _ := syncpkg.SnapshotMtimes([]string{dir})
 
 	// Modify the file after snapshot
 	time.Sleep(10 * time.Millisecond)
-	os.WriteFile(file, []byte("modified"), 0o644)
+	helperWriteFile(t, file, []byte("modified"))
 
 	conflicts := snap.DetectConflicts()
 
@@ -62,7 +76,7 @@ func TestDetectConflicts_FileModified(t *testing.T) {
 func TestDetectConflicts_FileDeleted(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "deleted.txt")
-	os.WriteFile(file, []byte("temporary"), 0o644)
+	helperWriteFile(t, file, []byte("temporary"))
 
 	snap, _ := syncpkg.SnapshotMtimes([]string{dir})
 
@@ -89,13 +103,13 @@ func TestDetectConflicts_SkipsNonexistentDir(t *testing.T) {
 func TestSnapshotMtimes_MultipleDirs(t *testing.T) {
 	dir1 := t.TempDir()
 	dir2 := t.TempDir()
-	os.WriteFile(filepath.Join(dir1, "a.txt"), []byte("a"), 0o644)
-	os.WriteFile(filepath.Join(dir2, "b.txt"), []byte("b"), 0o644)
+	helperWriteFile(t, filepath.Join(dir1, "a.txt"), []byte("a"))
+	helperWriteFile(t, filepath.Join(dir2, "b.txt"), []byte("b"))
 
 	snap, _ := syncpkg.SnapshotMtimes([]string{dir1, dir2})
 
 	time.Sleep(10 * time.Millisecond)
-	os.WriteFile(filepath.Join(dir1, "a.txt"), []byte("modified"), 0o644)
+	helperWriteFile(t, filepath.Join(dir1, "a.txt"), []byte("modified"))
 
 	conflicts := snap.DetectConflicts()
 	if len(conflicts) != 1 {
@@ -108,8 +122,8 @@ func TestSnapshotMtimes_UsesProfile(t *testing.T) {
 	profile, _ := registry.Get("claude")
 
 	home := t.TempDir()
-	os.MkdirAll(profile.ConfigFullPath(home), 0o755)
-	os.WriteFile(filepath.Join(profile.ConfigFullPath(home), "settings.json"), []byte("{}"), 0o644)
+	helperMkdirAll(t, profile.ConfigFullPath(home))
+	helperWriteFile(t, filepath.Join(profile.ConfigFullPath(home), "settings.json"), []byte("{}"))
 
 	snap, err := syncpkg.SnapshotMtimesFromProfile(profile, home)
 	if err != nil {

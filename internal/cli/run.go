@@ -26,7 +26,7 @@ func newRunCmd() *cobra.Command {
 		Short: "Run an editor in a secure sandbox",
 		Long:  "Launch an AI coding editor inside an isolated container with workspace sync and exclusion filtering.",
 		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil
 		},
 	}

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"io"
 
+	cerrdefs "github.com/containerd/errdefs"
 	dockercontainer "github.com/docker/docker/api/types/container"
+	dockerimage "github.com/docker/docker/api/types/image"
 	dockermount "github.com/docker/docker/api/types/mount"
 	dockernetwork "github.com/docker/docker/api/types/network"
-	dockerimage "github.com/docker/docker/api/types/image"
 	dockervolume "github.com/docker/docker/api/types/volume"
 	dockerclient "github.com/docker/docker/client"
-	"github.com/docker/go-units"
 )
 
 type dockerRuntime struct {
@@ -22,7 +22,7 @@ type dockerRuntime struct {
 var _ ContainerRuntime = (*dockerRuntime)(nil)
 
 // NewDocker creates a Docker runtime using the Moby SDK client.
-func NewDocker(ctx context.Context) (*dockerRuntime, error) {
+func NewDocker(ctx context.Context) (ContainerRuntime, error) {
 	cli, err := dockerclient.NewClientWithOpts(
 		dockerclient.FromEnv,
 		dockerclient.WithAPIVersionNegotiation(),
@@ -49,7 +49,7 @@ func (d *dockerRuntime) VolumeCreate(ctx context.Context, name string, labels ma
 }
 
 func (d *dockerRuntime) VolumeRemove(ctx context.Context, name string, force bool) error {
-	return d.client.VolumeRemove(ctx, name, force)
+	return fmt.Errorf("removing volume: %w", d.client.VolumeRemove(ctx, name, force))
 }
 
 func (d *dockerRuntime) NetworkCreate(ctx context.Context, name string, internal bool) (string, error) {
@@ -64,19 +64,19 @@ func (d *dockerRuntime) NetworkCreate(ctx context.Context, name string, internal
 }
 
 func (d *dockerRuntime) NetworkRemove(ctx context.Context, id string) error {
-	return d.client.NetworkRemove(ctx, id)
+	return fmt.Errorf("removing network: %w", d.client.NetworkRemove(ctx, id))
 }
 
 func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec) (string, error) {
 	containerConfig := &dockercontainer.Config{
-		Image:       spec.Image,
-		Cmd:         spec.Cmd,
-		Env:         spec.Env,
-		User:        spec.User,
-		WorkingDir:  spec.WorkingDir,
-		Tty:         spec.Tty,
-		OpenStdin:   spec.OpenStdin,
-		AttachStdin: spec.OpenStdin,
+		Image:        spec.Image,
+		Cmd:          spec.Cmd,
+		Env:          spec.Env,
+		User:         spec.User,
+		WorkingDir:   spec.WorkingDir,
+		Tty:          spec.Tty,
+		OpenStdin:    spec.OpenStdin,
+		AttachStdin:  spec.OpenStdin,
 		AttachStdout: true,
 		AttachStderr: true,
 	}
@@ -117,7 +117,7 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec)
 }
 
 func (d *dockerRuntime) ContainerStart(ctx context.Context, id string) error {
-	return d.client.ContainerStart(ctx, id, dockercontainer.StartOptions{})
+	return fmt.Errorf("starting container: %w", d.client.ContainerStart(ctx, id, dockercontainer.StartOptions{}))
 }
 
 func (d *dockerRuntime) ContainerWait(ctx context.Context, id string) (int64, error) {
@@ -131,7 +131,7 @@ func (d *dockerRuntime) ContainerWait(ctx context.Context, id string) (int64, er
 }
 
 func (d *dockerRuntime) ContainerRemove(ctx context.Context, id string, force bool) error {
-	return d.client.ContainerRemove(ctx, id, dockercontainer.RemoveOptions{Force: force})
+	return fmt.Errorf("removing container: %w", d.client.ContainerRemove(ctx, id, dockercontainer.RemoveOptions{Force: force}))
 }
 
 func (d *dockerRuntime) ContainerAttach(ctx context.Context, id string) (io.ReadWriteCloser, error) {
@@ -168,12 +168,12 @@ func (d *dockerRuntime) ContainerExec(ctx context.Context, id string, cmd []stri
 }
 
 func (d *dockerRuntime) CopyToContainer(ctx context.Context, id, dstPath string, content io.Reader) error {
-	return d.client.CopyToContainer(ctx, id, dstPath, content, dockercontainer.CopyToContainerOptions{})
+	return fmt.Errorf("copy to container: %w", d.client.CopyToContainer(ctx, id, dstPath, content, dockercontainer.CopyToContainerOptions{}))
 }
 
 func (d *dockerRuntime) CopyFromContainer(ctx context.Context, id, srcPath string) (io.ReadCloser, error) {
 	reader, _, err := d.client.CopyFromContainer(ctx, id, srcPath)
-	return reader, err
+	return reader, fmt.Errorf("copy from container %s: %w", id, err)
 }
 
 func (d *dockerRuntime) ImagePull(ctx context.Context, ref string, out io.Writer) error {
@@ -191,26 +191,17 @@ func (d *dockerRuntime) ImagePull(ctx context.Context, ref string, out io.Writer
 }
 
 func (d *dockerRuntime) ImageExists(ctx context.Context, ref string) (bool, error) {
-	_, _, err := d.client.ImageInspectWithRaw(ctx, ref)
+	_, err := d.client.ImageInspect(ctx, ref)
 	if err != nil {
-		if dockerclient.IsErrNotFound(err) {
+		if cerrdefs.IsNotFound(err) {
 			return false, nil
 		}
-		return false, err
+		return false, fmt.Errorf("inspecting image: %w", err)
 	}
 	return true, nil
 }
 
 func (d *dockerRuntime) Ping(ctx context.Context) error {
 	_, err := d.client.Ping(ctx)
-	return err
-}
-
-// parseMemoryBytes converts human-readable memory strings ("4g", "512m") to bytes.
-func parseMemoryBytes(s string) int64 {
-	bytes, err := units.RAMInBytes(s)
-	if err != nil {
-		return 0
-	}
-	return bytes
+	return fmt.Errorf("docker ping: %w", err)
 }

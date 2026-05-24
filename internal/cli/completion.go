@@ -12,7 +12,7 @@ func newCompletionCmd(root *cobra.Command) *cobra.Command {
 		Use:   "completion [bash|zsh|fish|powershell]",
 		Short: "Generate shell completion script",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			switch args[0] {
 			case "bash":
 				return root.GenBashCompletion(os.Stdout)

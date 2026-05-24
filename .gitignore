@@ -12,3 +12,4 @@ bin/abx
 # OS-specific
 .DS_Store
 Thumbs.db
+.pi-codebase.json

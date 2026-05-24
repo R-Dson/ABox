@@ -16,8 +16,8 @@ func TestManager_RunCreatesAndStartsContainer(t *testing.T) {
 	waited := false
 
 	mock := &lifecycleTrackingRuntime{
-		onVolumeCreate:    func(string, map[string]string) error { return nil },
-		onVolumeRemove:    func(string, bool) error { return nil },
+		onVolumeCreate: func(string, map[string]string) error { return nil },
+		onVolumeRemove: func(string, bool) error { return nil },
 		onContainerCreate: func(runtime.ContainerSpec) (string, error) {
 			created = true
 			return "container-123", nil
@@ -29,7 +29,7 @@ func TestManager_RunCreatesAndStartsContainer(t *testing.T) {
 			}
 			return nil
 		},
-		onContainerWait: func(id string) (int64, error) {
+		onContainerWait: func(_ string) (int64, error) {
 			waited = true
 			return 0, nil
 		},
@@ -139,7 +139,9 @@ func (l *lifecycleTrackingRuntime) ContainerWait(_ context.Context, id string) (
 	}
 	return 0, nil
 }
-func (l *lifecycleTrackingRuntime) ContainerRemove(_ context.Context, _ string, _ bool) error { return nil }
+func (l *lifecycleTrackingRuntime) ContainerRemove(_ context.Context, _ string, _ bool) error {
+	return nil
+}
 func (l *lifecycleTrackingRuntime) ContainerAttach(_ context.Context, _ string) (io.ReadWriteCloser, error) {
 	return nil, nil
 }
@@ -152,6 +154,10 @@ func (l *lifecycleTrackingRuntime) CopyToContainer(_ context.Context, _, _ strin
 func (l *lifecycleTrackingRuntime) CopyFromContainer(_ context.Context, _, _ string) (io.ReadCloser, error) {
 	return nil, nil
 }
-func (l *lifecycleTrackingRuntime) ImagePull(_ context.Context, _ string, _ io.Writer) error { return nil }
-func (l *lifecycleTrackingRuntime) ImageExists(_ context.Context, _ string) (bool, error)    { return false, nil }
-func (l *lifecycleTrackingRuntime) Ping(_ context.Context) error                             { return nil }
+func (l *lifecycleTrackingRuntime) ImagePull(_ context.Context, _ string, _ io.Writer) error {
+	return nil
+}
+func (l *lifecycleTrackingRuntime) ImageExists(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+func (l *lifecycleTrackingRuntime) Ping(_ context.Context) error { return nil }

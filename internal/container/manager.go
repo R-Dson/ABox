@@ -70,27 +70,8 @@ func (m *Manager) CreateSession(ctx context.Context, profile config.EditorProfil
 
 // Run creates, starts, and waits for a container to complete.
 // Returns the container's exit code.
-func (m *Manager) Run(ctx context.Context, spec ContainerSpec) (int, error) {
-	rtSpec := runtime.ContainerSpec{
-		Name:        spec.Name,
-		Image:       spec.Image,
-		Cmd:         spec.Cmd,
-		Env:         spec.Env,
-		User:        spec.User,
-		WorkingDir:  spec.WorkingDir,
-		Tty:         spec.Tty,
-		OpenStdin:   spec.OpenStdin,
-		Binds:       spec.Binds,
-		CapDrop:     spec.CapDrop,
-		CapAdd:      spec.CapAdd,
-		SecurityOpt: spec.SecurityOpt,
-		NetworkMode: spec.NetworkMode,
-		AutoRemove:  spec.AutoRemove,
-		Memory:      spec.Memory,
-		NanoCPUs:    spec.NanoCPUs,
-	}
-
-	id, err := m.rt.ContainerCreate(ctx, rtSpec)
+func (m *Manager) Run(ctx context.Context, spec Spec) (int, error) {
+	id, err := m.rt.ContainerCreate(ctx, runtime.ContainerSpec(spec))
 	if err != nil {
 		return -1, fmt.Errorf("creating container: %w", err)
 	}

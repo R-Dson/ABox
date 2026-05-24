@@ -48,7 +48,9 @@ func TestMatcher_HasPatterns(t *testing.T) {
 func TestBuildMatcher_LoadsLocalIgnore(t *testing.T) {
 	dir := t.TempDir()
 	ignoreFile := filepath.Join(dir, ".abxignore")
-	os.WriteFile(ignoreFile, []byte("**/node_modules/**\n*.secret\n"), 0o644)
+	if err := os.WriteFile(ignoreFile, []byte("**/node_modules/**\n*.secret\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	m, err := exclusion.BuildMatcher(t.Context(), dir, "")
 	if err != nil {
