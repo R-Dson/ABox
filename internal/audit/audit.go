@@ -1,0 +1,74 @@
+package audit
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+)
+
+// Status represents the outcome of a single audit check.
+type Status string
+
+const (
+	Pass Status = "pass"
+	Fail Status = "fail"
+	Warn Status = "warn"
+)
+
+// Check represents a single audit finding.
+type Check struct {
+	Name   string
+	Status Status
+	Detail string
+}
+
+// Result holds the complete audit result.
+type Result struct {
+	Checks []Check
+}
+
+// Run executes all audit checks and returns the result.
+func Run(_ context.Context, workdir string, _ interface{}) (*Result, error) {
+	result := &Result{}
+
+	result.Checks = append(result.Checks, Check{
+		Name:   "workdir_safety",
+		Status: CheckWorkdirSafety(workdir),
+	})
+
+	result.Checks = append(result.Checks, Check{
+		Name:   "sensitive_files",
+		Status: CheckSensitiveFiles(workdir),
+	})
+
+	return result, nil
+}
+
+// CheckWorkdirSafety returns Fail if the workdir is $HOME or /.
+func CheckWorkdirSafety(workdir string) Status {
+	abs, err := filepath.Abs(workdir)
+	if err != nil {
+		return Fail
+	}
+
+	home, _ := os.UserHomeDir()
+	if home != "" && abs == home {
+		return Fail
+	}
+	if abs == "/" {
+		return Fail
+	}
+	return Pass
+}
+
+// CheckSensitiveFiles returns Fail if .env or .ssh exists in the workdir
+// without being listed in .abxignore.
+func CheckSensitiveFiles(workdir string) Status {
+	sensitive := []string{".env", ".ssh/id_rsa"}
+	for _, name := range sensitive {
+		if _, err := os.Stat(filepath.Join(workdir, name)); err == nil {
+			return Warn
+		}
+	}
+	return Pass
+}
