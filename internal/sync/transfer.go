@@ -60,6 +60,34 @@ func (s *Syncer) SyncIn(ctx context.Context, srcDir, volumeName, dstPath string)
 	return nil
 }
 
+// SyncOut transfers files from a container volume to a host directory.
+// It copies a tar archive from the container, then extracts it to destDir.
+// Skips if destDir doesn't exist.
+func (s *Syncer) SyncOut(ctx context.Context, volumeName, srcPath, destDir string) error {
+	if _, err := os.Stat(destDir); os.IsNotExist(err) {
+		slog.DebugContext(ctx, "sync dest does not exist, skipping", "path", destDir)
+		return nil
+	}
+
+	containerID, cleanup, err := s.mountVolumeContainer(ctx, volumeName)
+	if err != nil {
+		return fmt.Errorf("mounting volume %s: %w", volumeName, err)
+	}
+	defer cleanup()
+
+	stream, err := s.rt.CopyFromContainer(ctx, containerID, srcPath)
+	if err != nil {
+		return fmt.Errorf("copying from container: %w", err)
+	}
+	defer stream.Close()
+
+	if err := extractTar(stream, destDir); err != nil {
+		return fmt.Errorf("extracting tar: %w", err)
+	}
+
+	return nil
+}
+
 // mountVolumeContainer creates a short-lived container with the volume mounted.
 // Returns the container ID and a cleanup function.
 func (s *Syncer) mountVolumeContainer(ctx context.Context, volumeName string) (string, func(), error) {
@@ -137,6 +165,43 @@ func TarDir(dir string, w io.Writer) error {
 		return nil
 	}); err != nil {
 		return fmt.Errorf("walking directory: %w", err)
+	}
+	return nil
+}
+
+// extractTar extracts a tar archive to the destination directory.
+func extractTar(r io.Reader, dest string) error {
+	tr := tar.NewReader(r)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("reading tar: %w", err)
+		}
+
+		target := filepath.Join(dest, header.Name)
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
+				return fmt.Errorf("mkdir %s: %w", target, err)
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return fmt.Errorf("mkdir parent %s: %w", filepath.Dir(target), err)
+			}
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return fmt.Errorf("create %s: %w", target, err)
+			}
+			if _, err := io.Copy(f, tr); err != nil {
+				f.Close()
+				return fmt.Errorf("write %s: %w", target, err)
+			}
+			f.Close()
+		}
 	}
 	return nil
 }
