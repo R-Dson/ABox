@@ -23,15 +23,15 @@ type SessionVolumes struct {
 
 // Session holds all ephemeral resources for a single abx run.
 type Session struct {
-	ID        string
-	rt        runtime.ContainerRuntime
-	volumes   SessionVolumes
+	id      string
+	rt      runtime.ContainerRuntime
+	volumes SessionVolumes
 }
 
 // NewSession creates a session with the given ID, runtime, and volume configuration.
 func NewSession(id string, rt runtime.ContainerRuntime, vols SessionVolumes) *Session {
 	return &Session{
-		ID:      id,
+		id:      id,
 		rt:      rt,
 		volumes: vols,
 	}
@@ -56,14 +56,14 @@ func (s *Session) WorkspaceVol() string { return s.volumes.WorkspaceVol }
 func (s *Session) NetworkID() string    { return s.volumes.NetworkID }
 
 // VolumeNames returns all non-empty volume names for this session.
-func (s *Session) VolumeNames() []string {
+func (v *SessionVolumes) nonEmptyNames() []string {
 	var names []string
 	for _, name := range []string{
-		s.volumes.ConfigVol,
-		s.volumes.CacheVol,
-		s.volumes.StateVol,
-		s.volumes.ShareVol,
-		s.volumes.WorkspaceVol,
+		v.ConfigVol,
+		v.CacheVol,
+		v.StateVol,
+		v.ShareVol,
+		v.WorkspaceVol,
 	} {
 		if name != "" {
 			names = append(names, name)
@@ -71,6 +71,14 @@ func (s *Session) VolumeNames() []string {
 	}
 	return names
 }
+
+// VolumeNames returns all non-empty volume names (exported for tests).
+func (s *Session) VolumeNames() []string {
+	return s.volumes.nonEmptyNames()
+}
+
+// ID returns the session ID.
+func (s *Session) ID() string { return s.id }
 
 // Cleanup removes all volumes and the strict network created for this session.
 // Uses the provided context (typically background) so cleanup runs even if
