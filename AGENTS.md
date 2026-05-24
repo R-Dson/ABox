@@ -26,24 +26,94 @@ This document contains strict instructions, tooling rules, and architectural sta
 
 ## 2. Dev Environment & Tooling Rules
 
+### Tool Management
 *   **Manage CLI Tools Natively:** Do not create dummy `tools.go` files or blank-import packages to track dev tools. 
-    *   To add a tool (e.g., a linter or generator), run: `go get -tool <import-path>` [1.1.5].
-    *   To execute any project tool, run: `go tool <tool-name> <args>` [1.1.5].
-*   **Automated Modernization:** When taking over legacy code or upgrading the codebase, run `go fix ./...` first [2.4.3]. The modernizer engine in Go 1.26 automatically upgrades deprecated constructs (such as converting `interface{}` to `any`, and refactoring older loops or error patterns) [1.4.5, 2.4.3].
-*   **Exclude Unrelated Paths:** Use the `ignore` directive in `go.mod` to isolate large asset directories, legacy integrations, or scratch folders so they are skipped during package matching [1.2.4].
-*   **Static Analysis:** Before submitting any change, run the workspace linter:
-    ```bash
-    go tool golangci-lint run ./...
-    ```
+    *   To add a tool (e.g., a linter or generator), run: `go get -tool <import-path>`.
+    *   To execute any project tool, run: `go tool <tool-name> <args>`.
+*   **Automated Modernization:** When taking over legacy code or upgrading the codebase, run `go fix ./...` first. The modernizer engine in Go 1.26 automatically upgrades deprecated constructs (such as converting `interface{}` to `any`, and refactoring older loops or error patterns).
+*   **Exclude Unrelated Paths:** Use the `ignore` directive in `go.mod` to isolate large asset directories, legacy integrations, or scratch folders so they are skipped during package matching.
+
+### Linting & Static Analysis
+
+Before submitting any change, run:
+```bash
+go tool golangci-lint run ./...
+```
+
+The project uses golangci-lint (configured in `.golangci.yml`) with these linters enabled:
+
+| Linter | Purpose | What it catches |
+|--------|---------|----------------|
+| `errcheck` | Unchecked error returns | Missing `if err != nil` on `os.WriteFile`, `io.Copy`, etc. |
+| `gosimple` | Code simplification | Redundant returns, unnecessary blocks |
+| `govet` | Go vet correctness | Printf arg mismatches, uncopyable lock values |
+| `staticcheck` | Advanced static analysis | Deprecated API usage, common bugs |
+| `unused` | Dead code detection | Unused functions, variables, types |
+| `gofmt` | Formatting consistency | Files not matching `gofmt` output |
+| `goimports` | Import management | Missing or unused imports, wrong grouping |
+| `misspell` | Spelling in comments | Common English misspellings |
+| `revive` | Style & design rules | Stuttering type names, unused parameters, exported docs |
+| `exhaustive` | Switch completeness | Missing enum/case handling in type switches |
+| `wrapcheck` | Error wrapping | Unwrapped errors from external packages |
+| `noctx` | Context propagation | HTTP calls without `context.Context` |
+
+#### Linter Rules Enforced as Coding Standards
+
+**Error Wrapping (`wrapcheck`):** All errors returned from external packages must be wrapped with `fmt.Errorf` and `%w`:
+```go
+// Incorrect:
+return d.client.ContainerStart(ctx, id, opts)
+
+// Correct:
+return fmt.Errorf("starting container: %w", d.client.ContainerStart(ctx, id, opts))
+```
+Caveat: `fmt.Errorf("msg: %w", nil)` does NOT return nil — it returns a non-nil error. Only wrap when the error is non-nil, or use a conditional:
+```go
+if err := doWork(); err != nil {
+    return fmt.Errorf("work failed: %w", err)
+}
+return nil
+```
+
+**No Unused Parameters (`revive`):** If a callback or interface method parameter is unused, name it `_`:
+```go
+// Incorrect:
+func (s *stub) OnCreate(name string, opts Options) error { return nil }
+
+// Correct:
+func (s *stub) OnCreate(_ string, _ Options) error { return nil }
+```
+Exception: If the parameter is used inside the function body, keep the name even if the function is a no-op stub.
+
+**No Stuttering Type Names (`revive`):** If a type `Foo` in package `foo` would be referred to as `foo.Foo` externally, rename it to something more descriptive. For type aliases that re-export from another package, keep the name short:
+```go
+// Incorrect (container.ContainerSpec):
+package container
+type ContainerSpec = runtime.ContainerSpec
+
+// Correct (container.Spec):
+package container
+type Spec = runtime.ContainerSpec
+```
+
+**Unchecked Errors (`errcheck`):** Every function that returns an error must have its return value checked. In tests, use helper functions:
+```go
+func mustWriteFile(t *testing.T, path string, data []byte) {
+    t.Helper()
+    if err := os.WriteFile(path, data, 0o644); err != nil {
+        t.Fatal(err)
+    }
+}
+```
 
 ---
 
 ## 3. Idiomatic Syntax & Coding Standards
 
-*   **Instantiating Pointers to Literals:** Never write or call custom pointer helpers (e.g., `StringPtr("...")` or `IntPtr(10)`) [2.1.6]. Use the `new(expr)` built-in introduced in Go 1.26 to initialize pointers directly from literals or expressions [2.1.7, 2.4.3].
+*   **Instantiating Pointers to Literals:** Never write or call custom pointer helpers (e.g., `StringPtr("...")` or `IntPtr(10)`). Use the `new(expr)` built-in introduced in Go 1.26 to initialize pointers directly from literals or expressions.
     *   *Incorrect:* `u.Name = &nameVal` (where `nameVal` is a temp variable)
     *   *Correct:* `u.Name = new("John")` or `u.Age = new(30)`
-*   **Type-Safe Error Unwrapping:** Never use `errors.As` with a manual pointer-to-pointer setup unless working with legacy Go (< 1.26) versions. Use the type-safe, generic `errors.AsType` helper [2.2.1, 2.4.3].
+*   **Type-Safe Error Unwrapping:** Never use `errors.As` with a manual pointer-to-pointer setup unless working with legacy Go (< 1.26) versions. Use the type-safe, generic `errors.AsType` helper.
     *   *Incorrect:*
         ```go
         var pathErr *fs.PathError
@@ -53,14 +123,22 @@ This document contains strict instructions, tooling rules, and architectural sta
         ```go
         if pathErr, ok := errors.AsType[*fs.PathError](err); ok { ... }
         ```
-*   **JSON Zero-Value Control:** Do not use pointers solely to avoid emitting zero values when encoding structs [1.1.5]. Use the `omitzero` tag option introduced in Go 1.24 to omit empty non-pointer fields [1.1.1, 1.1.5].
-    *   *Correct:* `Created time.Time json:"created,omitzero"` [1.1.1]
+*   **JSON Zero-Value Control:** Do not use pointers solely to avoid emitting zero values when encoding structs. Use the `omitzero` tag option introduced in Go 1.24 to omit empty non-pointer fields.
+    *   *Correct:*
+        ```go
+        type Record struct {
+            Created time.Time `json:"created,omitzero"`
+        }
+        ```
+*   **Exported Constructors Return Interfaces:** When a constructor creates an unexported type, return the interface — not the concrete type. This prevents leaking implementation details through the API.
+    *   *Incorrect:* `func NewDocker() (*dockerRuntime, error)`
+    *   *Correct:* `func NewDocker() (ContainerRuntime, error)`
 
 ---
 
 ## 4. Concurrency Directives
 
-*   **Poka-Yoke WaitGroups:** Do not write manual `wg.Add(1)` and deferred `wg.Done()` boilerplate for standard concurrent jobs. It is error-prone. Use the `WaitGroup.Go` method introduced in Go 1.25 to automatically manage goroutine lifetime counters [3.1.1, 3.1.6].
+*   **Poka-Yoke WaitGroups:** Do not write manual `wg.Add(1)` and deferred `wg.Done()` boilerplate for standard concurrent jobs. It is error-prone. Use the `WaitGroup.Go` method introduced in Go 1.25 to automatically manage goroutine lifetime counters.
     *   *Incorrect:*
         ```go
         wg.Add(1)
@@ -76,7 +154,7 @@ This document contains strict instructions, tooling rules, and architectural sta
         })
         ```
 *   **Structured Error Propagation:** When executing concurrent tasks that return errors or require cooperative cancellation, use `golang.org/x/sync/errgroup` with a context. Do not manage error collection via raw channels manually.
-*   **No Raw `GOMAXPROCS` Tuning:** Do not import `uber-go/automaxprocs` or manually adjust CPU thread bounds for containerized deployments [1.2.6]. The Go runtime is container-aware as of Go 1.25 and automatically scales thread pools based on cgroup quotas [1.2.3, 1.2.6].
+*   **No Raw `GOMAXPROCS` Tuning:** Do not import `uber-go/automaxprocs` or manually adjust CPU thread bounds for containerized deployments. The Go runtime is container-aware as of Go 1.25 and automatically scales thread pools based on cgroup quotas.
 
 ---
 
@@ -93,7 +171,7 @@ To enforce loose coupling and prevent tests from breaks during internal refactor
 
 ### Test Fixtures with `testdata/`
 *   Keep raw payloads, JSON schemas, mock responses, and database seed SQL queries in a subdirectory named `testdata/` inside the local package folder.
-*   The Go toolchain ignores the `testdata/` directory during standard compilation [1.1.5, 1.2.4].
+*   The Go toolchain ignores the `testdata/` directory during standard compilation.
 *   Access files within `testdata/` using standard file reads or `//go:embed`:
     ```go
     //go:embed testdata/user_payload.json
@@ -109,8 +187,8 @@ To enforce loose coupling and prevent tests from breaks during internal refactor
 
 ### Async and Concurrency Testing
 *   **No Real-World Sleeps:** Do not use `time.Sleep()` in concurrent tests to coordinate async execution. This introduces flaky and slow CI pipelines.
-*   **Virtual Time Isolation:** Wrap time-dependent concurrent code in `testing/synctest`. Inside this block, time is virtualized and instantly fast-forwards through timers without delays [1.1.1, 1.1.4].
-*   **Automated Context Lifetimes:** Always retrieve the active test context using `t.Context()` to pass downstream to database queries or API clients [1.1.1, 1.1.4]. This ensures the test teardown cleanly cancels lingering network tasks if the test times out [1.1.1].
+*   **Virtual Time Isolation:** Wrap time-dependent concurrent code in `testing/synctest`. Inside this block, time is virtualized and instantly fast-forwards through timers without delays.
+*   **Automated Context Lifetimes:** Always retrieve the active test context using `t.Context()` to pass downstream to database queries or API clients. This ensures the test teardown cleanly cancels lingering network tasks if the test times out.
 
 ---
 
@@ -151,7 +229,7 @@ func TestValidateEmail(t *testing.T) {
     for _, tc := range tests {
         t.Run(tc.name, func(t *testing.T) {
             // Retrieve contextual test execution parameters
-            ctx := t.Context() // [1.1.1]
+            ctx := t.Context()
 
             err := validator.ValidateEmail(ctx, tc.email)
             if (err != nil) != tc.wantErr {
@@ -166,7 +244,7 @@ func TestValidateEmail(t *testing.T) {
 
 ## 7. Performance Benchmarking Rules
 
-*   **Benchmark Loop Guarding:** When benchmarking algorithms, execute tests using `b.Loop()` [1.1.4, 1.4.4]. This avoids synthetic compiler loop optimization side effects.
+*   **Benchmark Loop Guarding:** When benchmarking algorithms, execute tests using `b.Loop()`. This avoids synthetic compiler loop optimization side effects.
     ```go
     func BenchmarkProcessRecord(b *testing.B) {
         // Run setup logic here...
