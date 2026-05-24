@@ -21,7 +21,6 @@
 - **Goose** (`goose`)
 - **Gemini** (`gemini`)
 - **Codex** (`codex`)
-- **Cursor** (`cursor`)
 - **Mistral Vibe** (`vibe`)
 
 ## Prerequisites
