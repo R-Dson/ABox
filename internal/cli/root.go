@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"github.com/r-dson/abox/internal/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +16,7 @@ func NewRootCmd(version string) *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			verbose, _ := cmd.Flags().GetBool("verbose")
 			jsonLogs, _ := cmd.Flags().GetBool("json-logs")
-			setupLogging(verbose, jsonLogs)
+			logging.Setup(verbose, jsonLogs)
 			return nil
 		},
 	}
