@@ -54,11 +54,15 @@ func TestNewSession_CreatesAllVolumes(t *testing.T) {
 }
 
 func TestNewSession_CleanupOnError(t *testing.T) {
+	var mu sync.Mutex
 	callCount := 0
 	stub := &runtime.StubRuntime{
 		VolumeCreateFn: func(_ context.Context, _ string, _ map[string]string) error {
+			mu.Lock()
 			callCount++
-			if callCount == 2 {
+			isSecond := callCount == 2
+			mu.Unlock()
+			if isSecond {
 				return errTestFailed
 			}
 			return nil
