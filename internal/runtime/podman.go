@@ -35,5 +35,8 @@ func podmanSocket() string {
 
 func pingWithClient(ctx context.Context, cli *dockerclient.Client) error {
 	_, err := cli.Ping(ctx)
-	return fmt.Errorf("podman ping: %w", err)
+	if err != nil {
+		return fmt.Errorf("podman ping: %w", err)
+	}
+	return nil
 }

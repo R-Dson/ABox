@@ -8,7 +8,7 @@ import (
 )
 
 func TestRun_ReturnsTypedResult(t *testing.T) {
-	result, err := audit.Run(t.Context(), ".", nil)
+	result, err := audit.Run(t.Context(), ".")
 	if err != nil {
 		t.Fatalf("Run() error: %v", err)
 	}
@@ -18,7 +18,7 @@ func TestRun_ReturnsTypedResult(t *testing.T) {
 }
 
 func TestResult_HasStatusPerCheck(t *testing.T) {
-	result, err := audit.Run(t.Context(), ".", nil)
+	result, err := audit.Run(t.Context(), ".")
 	if err != nil {
 		t.Fatalf("Run() error: %v", err)
 	}

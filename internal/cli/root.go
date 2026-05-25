@@ -24,9 +24,6 @@ func NewRootCmd(version string) *cobra.Command {
 	root.PersistentFlags().Bool("verbose", false, "enable debug logging to ~/.local/state/abx/abx.log")
 	root.PersistentFlags().Bool("json-logs", false, "emit JSON structured logs to stderr")
 
-	// Default run when called with no subcommand
-	root.RunE = newRunCmd().RunE
-
 	root.AddCommand(
 		newRunCmd(),
 		newAuditCmd(),
@@ -34,5 +31,21 @@ func NewRootCmd(version string) *cobra.Command {
 		newVersionCmd(version),
 		newCompletionCmd(root),
 	)
+
+	// Default action when called with no subcommand delegates to 'run'
+	run := newRunCmd()
+
+	root.AddCommand(
+		run,
+		newAuditCmd(),
+		newConfigCmd(),
+		newVersionCmd(version),
+		newCompletionCmd(root),
+	)
+
+	// Default action when called with no subcommand delegates to 'run'
+	root.RunE = run.RunE
+	root.Flags().AddFlagSet(run.Flags())
+
 	return root
 }

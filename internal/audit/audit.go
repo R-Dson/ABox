@@ -28,7 +28,7 @@ type Result struct {
 }
 
 // Run executes all audit checks and returns the result.
-func Run(_ context.Context, workdir string, _ interface{}) (*Result, error) {
+func Run(_ context.Context, workdir string) (*Result, error) {
 	result := &Result{}
 
 	result.Checks = append(result.Checks, Check{
@@ -61,8 +61,7 @@ func CheckWorkdirSafety(workdir string) Status {
 	return Pass
 }
 
-// CheckSensitiveFiles returns Fail if .env or .ssh exists in the workdir
-// without being listed in .abxignore.
+// CheckSensitiveFiles returns Warn if known sensitive files exist in workdir.
 func CheckSensitiveFiles(workdir string) Status {
 	sensitive := []string{".env", ".ssh/id_rsa"}
 	for _, name := range sensitive {

@@ -3,21 +3,27 @@ package logging
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+
+	"github.com/r-dson/abox/internal/config"
 )
 
 // Setup configures the global slog logger.
 // When verbose is true, logs are written to ~/.local/state/abx/abx.log.
 // When jsonOutput is true, stderr gets JSON-formatted logs.
 func Setup(verbose, jsonOutput bool) {
+	level := slog.LevelInfo
+	if verbose {
+		level = slog.LevelDebug
+	}
+
 	var handlers []slog.Handler
-	opts := &slog.HandlerOptions{Level: slog.LevelDebug}
+	opts := &slog.HandlerOptions{Level: level}
 
 	if verbose {
-		logDir := filepath.Join(homeDir(), ".local", "state", "abx")
+		logDir := filepath.Join(config.HomeDir(), ".local", "state", "abx")
 		if err := os.MkdirAll(logDir, 0o700); err == nil {
 			f, err := os.OpenFile(
 				filepath.Join(logDir, "abx.log"),
@@ -41,14 +47,6 @@ func Setup(verbose, jsonOutput bool) {
 		handler = &multiHandler{handlers: handlers}
 	}
 	slog.SetDefault(slog.New(handler))
-}
-
-func homeDir() string {
-	if h := os.Getenv("HOME"); h != "" {
-		return h
-	}
-	h, _ := os.UserHomeDir()
-	return h
 }
 
 func isTerminal(f *os.File) bool {
@@ -100,6 +98,3 @@ func (m *multiHandler) WithGroup(name string) slog.Handler {
 
 // Verify interface compliance
 var _ slog.Handler = (*multiHandler)(nil)
-
-// Discard is a convenience writer for suppressing output in tests.
-var Discard = io.Discard

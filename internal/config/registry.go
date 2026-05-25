@@ -62,7 +62,7 @@ func LoadEditorRegistry() (*EditorRegistry, error) {
 }
 
 // Get returns the EditorProfile for the named editor.
-// Default logic is not handled here.
+// Falls back to opencode if the name is not found.
 func (r *EditorRegistry) Get(name string) (EditorProfile, error) {
 	p, ok := r.profiles[name]
 	if !ok {

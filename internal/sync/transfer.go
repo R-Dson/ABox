@@ -120,63 +120,15 @@ func (s *Syncer) mountVolumeContainer(ctx context.Context, volumeName string) (s
 
 // TarDir writes a tar archive of the directory contents to the writer.
 // Files are stored with paths relative to dir.
+// Equivalent to TarFiltered with a nil matcher (all files included).
 func TarDir(dir string, w io.Writer) error {
-	tw := tar.NewWriter(w)
-	defer tw.Close()
-
-	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return fmt.Errorf("relative path: %w", err)
-		}
-		rel = filepath.ToSlash(rel)
-
-		info, err := d.Info()
-		if err != nil {
-			return fmt.Errorf("file info: %w", err)
-		}
-
-		header, err := tar.FileInfoHeader(info, "")
-		if err != nil {
-			return fmt.Errorf("tar header: %w", err)
-		}
-		header.Name = rel
-
-		if err := tw.WriteHeader(header); err != nil {
-			return fmt.Errorf("write header: %w", err)
-		}
-
-		f, err := os.Open(path)
-		if err != nil {
-			return fmt.Errorf("open file: %w", err)
-		}
-		defer f.Close()
-
-		if _, err := io.Copy(tw, f); err != nil {
-			return fmt.Errorf("copy file content: %w", err)
-		}
-
-		return nil
-	}); err != nil {
-		return fmt.Errorf("walking directory: %w", err)
-	}
-	return nil
+	return TarFiltered(dir, w, nil)
 }
 
 // TarFiltered writes a tar archive of the directory contents to the writer,
 // excluding files and directories that match the exclusion patterns.
-// If matcher is nil, all files are included (equivalent to TarDir).
+// If matcher is nil, all files are included.
 func TarFiltered(dir string, w io.Writer, matcher *exclusion.Matcher) error {
-	if matcher == nil {
-		return TarDir(dir, w)
-	}
 
 	tw := tar.NewWriter(w)
 	defer tw.Close()
@@ -197,7 +149,7 @@ func TarFiltered(dir string, w io.Writer, matcher *exclusion.Matcher) error {
 			return nil
 		}
 
-		if matcher.Match(rel) {
+		if matcher != nil && matcher.Match(rel) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}

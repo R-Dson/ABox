@@ -16,7 +16,6 @@ type RunOptions struct {
 	Offline       bool
 	StrictNetwork bool
 	NoInternet    bool
-	Verbose       bool
 	ForceSync     bool
 	ExcludeURL    string
 	ExtraEnv      []string
@@ -72,12 +71,8 @@ func runSession(_ *RunOptions) func(*cobra.Command, []string) error {
 }
 
 // ValidateWorkdir rejects unsafe workspace paths.
-func ValidateWorkdir(path string) error {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return fmt.Errorf("resolving path: %w", err)
-	}
-
+// Expects an absolute path.
+func ValidateWorkdir(abs string) error {
 	home, _ := os.UserHomeDir()
 	if home != "" && abs == home {
 		return fmt.Errorf("cannot use $HOME (%s) as workspace", abs)

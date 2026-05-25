@@ -7,10 +7,6 @@ import (
 	"github.com/r-dson/abox/internal/runtime"
 )
 
-// SyncImage is the lightweight Alpine image used for sync and bootstrap operations.
-// Matches the SYNC_IMAGE constant from the Bash implementation.
-const SyncImage = runtime.SyncImage
-
 // SessionVolumes holds the volume and network names for a session.
 type SessionVolumes struct {
 	ConfigVol    string

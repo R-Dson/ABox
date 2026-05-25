@@ -19,7 +19,7 @@ func newAuditCmd() *cobra.Command {
 				workdir = args[0]
 			}
 
-			result, err := audit.Run(cmd.Context(), workdir, nil)
+			result, err := audit.Run(cmd.Context(), workdir)
 			if err != nil {
 				return err
 			}

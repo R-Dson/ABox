@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/r-dson/abox/internal/config"
 	"github.com/spf13/cobra"
@@ -58,19 +59,7 @@ func newSetEditorCmd() *cobra.Command {
 				return fmt.Errorf("loading registry: %w", err)
 			}
 
-			if _, err := registry.Get(name); err != nil {
-				return fmt.Errorf("unknown editor %q: %w", name, err)
-			}
-
-			// Verify the name actually exists (Get falls back to opencode)
-			found := false
-			for _, n := range registry.Names() {
-				if n == name {
-					found = true
-					break
-				}
-			}
-			if !found {
+			if !registry.Has(name) {
 				return fmt.Errorf("unknown editor %q (available: %v)", name, registry.Names())
 			}
 
@@ -91,7 +80,7 @@ func newSetEditorCmd() *cobra.Command {
 // writeConfigField writes a single field to a JSON config file,
 // creating the file and parent directories if needed.
 func writeConfigField(path, key, value string) error {
-	if err := os.MkdirAll(filepathonly(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 
@@ -112,13 +101,4 @@ func writeConfigField(path, key, value string) error {
 		return fmt.Errorf("writing config: %w", err)
 	}
 	return nil
-}
-
-func filepathonly(path string) string {
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == '/' {
-			return path[:i]
-		}
-	}
-	return "."
 }

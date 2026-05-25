@@ -109,8 +109,8 @@ func TestSession_CleanupSkipsEmptyFields(t *testing.T) {
 }
 
 func TestSyncImageConstant(t *testing.T) {
-	if container.SyncImage != "ghcr.io/r-dson/abox:sync" {
-		t.Errorf("SyncImage = %q, want ghcr.io/r-dson/abox:sync", container.SyncImage)
+	if runtime.SyncImage != "ghcr.io/r-dson/abox:sync" {
+		t.Errorf("SyncImage = %q, want ghcr.io/r-dson/abox:sync", runtime.SyncImage)
 	}
 }
 

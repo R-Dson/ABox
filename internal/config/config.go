@@ -47,12 +47,9 @@ func Load(v *viper.Viper) (*Config, error) {
 
 // isConfigNotFound returns true if the error is due to a missing config file.
 func isConfigNotFound(err error) bool {
-	if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+	var notFound viper.ConfigFileNotFoundError
+	if errors.As(err, &notFound) {
 		return true
 	}
-	if errors.Is(err, os.ErrNotExist) {
-		return true
-	}
-	// Viper wraps some not-found errors; check the error string as last resort.
-	return false
+	return errors.Is(err, os.ErrNotExist)
 }

@@ -22,10 +22,8 @@ func buildEnv(profile config.EditorProfile) []string {
 	}
 
 	// SSH agent socket forwarding
-	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		if _, err := os.Stat(sock); err == nil {
-			env = append(env, "SSH_AUTH_SOCK=/tmp/ssh-agent.sock")
-		}
+	if sshSocket := sshAgentSocket(); sshSocket != "" {
+		env = append(env, "SSH_AUTH_SOCK=/tmp/ssh-agent.sock")
 	}
 
 	return env
@@ -35,14 +33,13 @@ func buildBinds(_ config.EditorProfile, sess *Session, workdir string) []string 
 	home := config.HomeDir()
 	var binds []string
 
-	// Config volume
-	binds = append(binds, sess.ConfigVol()+":/vol/config")
-	// Cache volume
-	binds = append(binds, sess.CacheVol()+":/vol/cache")
-	// State volume
-	binds = append(binds, sess.StateVol()+":/vol/state")
-	// Share volume
-	binds = append(binds, sess.ShareVol()+":/vol/share")
+	// Editor data volumes
+	binds = append(binds,
+		sess.ConfigVol()+":/vol/config",
+		sess.CacheVol()+":/vol/cache",
+		sess.StateVol()+":/vol/state",
+		sess.ShareVol()+":/vol/share",
+	)
 
 	// Workspace: volume (exclusions active) or direct bind
 	if sess.WorkspaceVol() != "" {
@@ -57,15 +54,25 @@ func buildBinds(_ config.EditorProfile, sess *Session, workdir string) []string 
 	}
 
 	// SSH: prefer agent socket forwarding; fall back to .ssh directory mount
-	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		if _, err := os.Stat(sock); err == nil {
-			binds = append(binds, sock+":/tmp/ssh-agent.sock:ro")
-		}
+	if sock := sshAgentSocket(); sock != "" {
+		binds = append(binds, sock+":/tmp/ssh-agent.sock:ro")
 	} else if sshDir := filepath.Join(home, ".ssh"); dirExists(sshDir) {
 		binds = append(binds, sshDir+":/home/agent/.ssh:ro,z")
 	}
 
 	return binds
+}
+
+// sshAgentSocket returns the SSH agent socket path if available, empty string otherwise.
+func sshAgentSocket() string {
+	sock := os.Getenv("SSH_AUTH_SOCK")
+	if sock == "" {
+		return ""
+	}
+	if _, err := os.Stat(sock); err != nil {
+		return ""
+	}
+	return sock
 }
 
 func fileExists(path string) bool {
@@ -79,9 +86,9 @@ func dirExists(path string) bool {
 }
 
 func parseMemoryBytes(s string) int64 {
-	bytes, err := units.RAMInBytes(s)
+	b, err := units.RAMInBytes(s)
 	if err != nil {
 		return 0
 	}
-	return bytes
+	return b
 }

@@ -87,8 +87,7 @@ func loadLocalIgnore(workdir string) ([]string, error) {
 }
 
 func fetchRemotePatterns(_ context.Context, _ string) ([]string, error) {
-	// TODO: implement HTTP fetch in a later task
-	return nil, fmt.Errorf("remote pattern fetch not yet implemented")
+	return nil, fmt.Errorf("remote pattern fetch not implemented")
 }
 
 func mergePatterns(base, additional []string) []string {
@@ -141,23 +140,9 @@ func normalizePattern(p string) string {
 }
 
 func containsGlobstar(p string) bool {
-	return len(p) >= 2 && (p[:2] == "**" || contains(p, "**/"))
-}
-
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
+	return len(p) >= 2 && (p[:2] == "**" || strings.Contains(p, "**/"))
 }
 
 func hasGlobChars(p string) bool {
-	for _, c := range p {
-		if c == '*' || c == '?' || c == '[' {
-			return true
-		}
-	}
-	return false
+	return strings.ContainsAny(p, "*?[")
 }

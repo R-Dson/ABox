@@ -69,12 +69,17 @@ func (m *Manager) CreateSession(ctx context.Context, profile config.EditorProfil
 }
 
 // Run creates, starts, and waits for a container to complete.
-// Returns the container's exit code.
+// Returns the container's exit code. Cleans up the container on any error.
 func (m *Manager) Run(ctx context.Context, spec Spec) (int, error) {
 	id, err := m.rt.ContainerCreate(ctx, runtime.ContainerSpec(spec))
 	if err != nil {
 		return -1, fmt.Errorf("creating container: %w", err)
 	}
+
+	// Ensure cleanup on any failure path
+	defer func() {
+		_ = m.rt.ContainerRemove(context.Background(), id, true)
+	}()
 
 	if err := m.rt.ContainerStart(ctx, id); err != nil {
 		return -1, fmt.Errorf("starting container: %w", err)
