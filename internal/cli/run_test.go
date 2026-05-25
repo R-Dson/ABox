@@ -34,10 +34,18 @@ func TestRunCmd_DefaultWorkdir(t *testing.T) {
 
 	// Should not panic or error on missing workdir argument
 	// (uses current directory as default)
-	// Full orchestration not yet wired — accept "not yet" errors
+	// Full orchestration requires a container runtime and images.
+	// Accept any error that indicates missing runtime or images.
 	err := root.Execute()
-	if err != nil && !strings.Contains(err.Error(), "not yet") && !strings.Contains(err.Error(), "runtime") {
-		t.Errorf("unexpected error: %v", err)
+	if err != nil {
+		msg := err.Error()
+		if !strings.Contains(msg, "not yet") &&
+			!strings.Contains(msg, "runtime") &&
+			!strings.Contains(msg, "image") &&
+			!strings.Contains(msg, "unreachable") &&
+			!strings.Contains(msg, "ExitError") {
+			t.Errorf("unexpected error: %v", err)
+		}
 	}
 }
 

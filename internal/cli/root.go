@@ -24,15 +24,6 @@ func NewRootCmd(version string) *cobra.Command {
 	root.PersistentFlags().Bool("verbose", false, "enable debug logging to ~/.local/state/abx/abx.log")
 	root.PersistentFlags().Bool("json-logs", false, "emit JSON structured logs to stderr")
 
-	root.AddCommand(
-		newRunCmd(),
-		newAuditCmd(),
-		newConfigCmd(),
-		newVersionCmd(version),
-		newCompletionCmd(root),
-	)
-
-	// Default action when called with no subcommand delegates to 'run'
 	run := newRunCmd()
 
 	root.AddCommand(
