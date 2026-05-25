@@ -3,6 +3,8 @@ build/
 bin/*
 *.x.c
 abx
+coverage.out
+dist/
 
 # Editor-specific
 .vscode/
