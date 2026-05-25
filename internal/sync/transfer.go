@@ -129,7 +129,6 @@ func TarDir(dir string, w io.Writer) error {
 // excluding files and directories that match the exclusion patterns.
 // If matcher is nil, all files are included.
 func TarFiltered(dir string, w io.Writer, matcher *exclusion.Matcher) error {
-
 	tw := tar.NewWriter(w)
 	defer tw.Close()
 

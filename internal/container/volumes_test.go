@@ -7,13 +7,15 @@ import (
 
 	"github.com/r-dson/abox/internal/config"
 	"github.com/r-dson/abox/internal/container"
+	"github.com/r-dson/abox/internal/runtime"
 )
 
 func TestNewSession_CreatesAllVolumes(t *testing.T) {
 	createdVolumes := []string{}
 	var mu sync.Mutex
-	mock := &volumeTrackingRuntime{
-		onVolumeCreate: func(name string, _ map[string]string) error {
+
+	stub := &runtime.StubRuntime{
+		VolumeCreateFn: func(_ context.Context, name string, _ map[string]string) error {
 			mu.Lock()
 			createdVolumes = append(createdVolumes, name)
 			mu.Unlock()
@@ -25,7 +27,7 @@ func TestNewSession_CreatesAllVolumes(t *testing.T) {
 	profile, _ := registry.Get("claude")
 	cfg := &config.Config{Editor: "claude"}
 
-	mgr := container.NewManager(mock)
+	mgr := container.NewManager(stub)
 	sess, err := mgr.CreateSession(t.Context(), profile, cfg)
 	if err != nil {
 		t.Fatalf("CreateSession() error: %v", err)
@@ -53,8 +55,8 @@ func TestNewSession_CreatesAllVolumes(t *testing.T) {
 
 func TestNewSession_CleanupOnError(t *testing.T) {
 	callCount := 0
-	mock := &volumeTrackingRuntime{
-		onVolumeCreate: func(string, map[string]string) error {
+	stub := &runtime.StubRuntime{
+		VolumeCreateFn: func(_ context.Context, _ string, _ map[string]string) error {
 			callCount++
 			if callCount == 2 {
 				return errTestFailed
@@ -67,32 +69,11 @@ func TestNewSession_CleanupOnError(t *testing.T) {
 	profile, _ := registry.Get("claude")
 	cfg := &config.Config{Editor: "claude"}
 
-	mgr := container.NewManager(mock)
+	mgr := container.NewManager(stub)
 	_, err := mgr.CreateSession(t.Context(), profile, cfg)
 	if err == nil {
 		t.Fatal("expected error when volume creation fails")
 	}
-}
-
-// volumeTrackingRuntime extends stubRuntime with volume and network tracking.
-type volumeTrackingRuntime struct {
-	stubRuntime
-	onVolumeCreate  func(name string, labels map[string]string) error
-	onNetworkCreate func(name string, internal bool) (string, error)
-}
-
-func (v *volumeTrackingRuntime) VolumeCreate(_ context.Context, name string, labels map[string]string) error {
-	if v.onVolumeCreate != nil {
-		return v.onVolumeCreate(name, labels)
-	}
-	return nil
-}
-
-func (v *volumeTrackingRuntime) NetworkCreate(_ context.Context, name string, internal bool) (string, error) {
-	if v.onNetworkCreate != nil {
-		return v.onNetworkCreate(name, internal)
-	}
-	return "", nil
 }
 
 var errTestFailed = errTestFailedType{}

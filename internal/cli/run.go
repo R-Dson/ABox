@@ -30,7 +30,6 @@ type RunOptions struct {
 }
 
 // SessionConfig holds the resolved configuration for a session.
-// Used by RunSessionForTest to inject test configuration.
 type SessionConfig struct {
 	Editor        string
 	StrictNetwork bool
@@ -57,7 +56,7 @@ func newRunCmd() *cobra.Command {
 		Short: "Run an editor in a secure sandbox",
 		Long:  "Launch an AI coding editor inside an isolated container with workspace sync and exclusion filtering.",
 		Args:  cobra.MaximumNArgs(1),
-		RunE:  runSession(opts),
+		RunE:  runSessionFromOpts(opts),
 	}
 
 	cmd.Flags().StringVar(&opts.Editor, "editor", "", "editor to use (aider|claude|codex|copilot|gemini|goose|opencode|vibe)")
@@ -73,7 +72,7 @@ func newRunCmd() *cobra.Command {
 	return cmd
 }
 
-func runSession(opts *RunOptions) func(*cobra.Command, []string) error {
+func runSessionFromOpts(opts *RunOptions) func(*cobra.Command, []string) error {
 	return func(_ *cobra.Command, args []string) error {
 		workdir := "."
 		if len(args) > 0 {
@@ -103,13 +102,13 @@ func runSession(opts *RunOptions) func(*cobra.Command, []string) error {
 			return err
 		}
 
-		return RunSessionForTest(context.Background(), rt, absWorkdir, cfg)
+		return RunSession(context.Background(), rt, absWorkdir, cfg)
 	}
 }
 
-// RunSessionForTest runs the full session orchestration with the given runtime.
-// Separated from the CLI wiring for testability.
-func RunSessionForTest(ctx context.Context, rt runtime.ContainerRuntime, workdir string, cfg *SessionConfig) error {
+// RunSession runs the full session orchestration with the given runtime.
+// Exported for testability — tests inject a mock runtime.
+func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string, cfg *SessionConfig) error {
 	// 1. Load editor registry and resolve editor
 	registry, err := config.LoadEditorRegistry()
 	if err != nil {
@@ -126,13 +125,13 @@ func RunSessionForTest(ctx context.Context, rt runtime.ContainerRuntime, workdir
 		return fmt.Errorf("resolving editor: %w", err)
 	}
 
-	// 2. Build exclusion matcher
-	// 2. Build exclusion matcher
-	// Used for workspace SyncIn with exclusion filtering
+	// 2. Build exclusion matcher (used for workspace SyncIn with filtering)
 	_, err = exclusion.BuildMatcher(ctx, workdir, cfg.ExcludeURL)
 	if err != nil {
 		return fmt.Errorf("building exclusion matcher: %w", err)
 	}
+
+	// 3. Create container session (volumes, optional strict network)
 	mgr := container.NewManager(rt)
 	sess, err := mgr.CreateSession(ctx, profile, &config.Config{
 		Editor:        editorName,

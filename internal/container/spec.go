@@ -1,11 +1,14 @@
 package container
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 
 	_ "embed"
 
+	"github.com/docker/go-units"
 	"github.com/r-dson/abox/internal/config"
 	"github.com/r-dson/abox/internal/runtime"
 )
@@ -30,8 +33,10 @@ func SeccompProfilePath() string {
 	return seccompPath()
 }
 
+// Spec is the container creation specification.
+type Spec = runtime.ContainerSpec
+
 // BuildSpec creates a ContainerSpec from profile, session, and config.
-// This replaces the string-building functions in container.sh.
 func BuildSpec(profile config.EditorProfile, sess *Session, workdir string, cfg *config.Config) Spec {
 	spec := Spec{
 		Image:       profile.ImageTag,
@@ -46,7 +51,6 @@ func BuildSpec(profile config.EditorProfile, sess *Session, workdir string, cfg 
 		AutoRemove:  true,
 	}
 
-	// Resource limits
 	if cfg.MemoryLimit != "" {
 		spec.Memory = parseMemoryBytes(cfg.MemoryLimit)
 	}
@@ -54,11 +58,84 @@ func BuildSpec(profile config.EditorProfile, sess *Session, workdir string, cfg 
 		spec.NanoCPUs = int64(cfg.CPULimit * 1e9)
 	}
 
-	// Volume mounts
-	spec.Binds = buildBinds(profile, sess, workdir)
-
+	spec.Binds = buildBinds(sess, workdir)
 	return spec
 }
 
-// Spec is the container creation specification.
-type Spec = runtime.ContainerSpec
+func buildEnv(profile config.EditorProfile) []string {
+	env := []string{
+		fmt.Sprintf("HOST_UID=%d", os.Getuid()),
+		fmt.Sprintf("HOST_GID=%d", os.Getgid()),
+	}
+
+	for _, key := range profile.EnvVars {
+		if val, ok := os.LookupEnv(key); ok {
+			env = append(env, key+"="+val)
+		}
+	}
+
+	if sshSocket := sshAgentSocket(); sshSocket != "" {
+		env = append(env, "SSH_AUTH_SOCK=/tmp/ssh-agent.sock")
+	}
+
+	return env
+}
+
+func buildBinds(sess *Session, workdir string) []string {
+	home := config.HomeDir()
+	var binds []string
+
+	binds = append(binds,
+		sess.ConfigVol()+":/vol/config",
+		sess.CacheVol()+":/vol/cache",
+		sess.StateVol()+":/vol/state",
+		sess.ShareVol()+":/vol/share",
+	)
+
+	if sess.WorkspaceVol() != "" {
+		binds = append(binds, sess.WorkspaceVol()+":/workspace")
+	} else {
+		binds = append(binds, workdir+":/workspace")
+	}
+
+	if gc := filepath.Join(home, ".gitconfig"); fileExists(gc) {
+		binds = append(binds, gc+":/home/agent/.gitconfig:ro,z")
+	}
+
+	if sock := sshAgentSocket(); sock != "" {
+		binds = append(binds, sock+":/tmp/ssh-agent.sock:ro")
+	} else if sshDir := filepath.Join(home, ".ssh"); dirExists(sshDir) {
+		binds = append(binds, sshDir+":/home/agent/.ssh:ro,z")
+	}
+
+	return binds
+}
+
+func sshAgentSocket() string {
+	sock := os.Getenv("SSH_AUTH_SOCK")
+	if sock == "" {
+		return ""
+	}
+	if _, err := os.Stat(sock); err != nil {
+		return ""
+	}
+	return sock
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func parseMemoryBytes(s string) int64 {
+	b, err := units.RAMInBytes(s)
+	if err != nil {
+		return 0
+	}
+	return b
+}

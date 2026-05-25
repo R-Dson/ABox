@@ -6,16 +6,13 @@ import (
 
 	"github.com/r-dson/abox/internal/config"
 	"github.com/r-dson/abox/internal/container"
+	"github.com/r-dson/abox/internal/runtime"
 )
 
 func TestCreateSession_StrictNetwork(t *testing.T) {
 	var createdInternal bool
-	mock := &volumeTrackingRuntime{
-		stubRuntime: stubRuntime{
-			onVolumeRemove: func(string, bool) error { return nil },
-		},
-		onVolumeCreate: func(string, map[string]string) error { return nil },
-		onNetworkCreate: func(_ string, internal bool) (string, error) {
+	stub := &runtime.StubRuntime{
+		NetworkCreateFn: func(_ context.Context, _ string, internal bool) (string, error) {
 			createdInternal = internal
 			return "net-strict-123", nil
 		},
@@ -25,7 +22,7 @@ func TestCreateSession_StrictNetwork(t *testing.T) {
 	profile, _ := registry.Get("claude")
 	cfg := &config.Config{Editor: "claude", StrictNetwork: true}
 
-	mgr := container.NewManager(mock)
+	mgr := container.NewManager(stub)
 	sess, err := mgr.CreateSession(t.Context(), profile, cfg)
 	if err != nil {
 		t.Fatalf("CreateSession() error: %v", err)
@@ -42,12 +39,8 @@ func TestCreateSession_StrictNetwork(t *testing.T) {
 
 func TestCreateSession_NoNetworkByDefault(t *testing.T) {
 	networkCreated := false
-	mock := &volumeTrackingRuntime{
-		stubRuntime: stubRuntime{
-			onVolumeRemove: func(string, bool) error { return nil },
-		},
-		onVolumeCreate: func(string, map[string]string) error { return nil },
-		onNetworkCreate: func(string, bool) (string, error) {
+	stub := &runtime.StubRuntime{
+		NetworkCreateFn: func(_ context.Context, _ string, _ bool) (string, error) {
 			networkCreated = true
 			return "net-xyz", nil
 		},
@@ -57,7 +50,7 @@ func TestCreateSession_NoNetworkByDefault(t *testing.T) {
 	profile, _ := registry.Get("claude")
 	cfg := &config.Config{Editor: "claude"}
 
-	mgr := container.NewManager(mock)
+	mgr := container.NewManager(stub)
 	sess, err := mgr.CreateSession(t.Context(), profile, cfg)
 	if err != nil {
 		t.Fatalf("CreateSession() error: %v", err)
