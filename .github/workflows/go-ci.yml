@@ -32,14 +32,18 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Run tests
-        run: go test -race -coverprofile=coverage.out ./...
+        run: |
+          # Exclude packages that require live Docker daemon or are trivially small
+          go test -race -coverprofile=coverage.out \
+            $(go list ./... | grep -v -E '(cmd/abx$|internal/runtime$)')
       - name: Check coverage
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
           echo "Total coverage: ${COVERAGE}%"
-          # Enforce minimum coverage gate (adjust as project matures)
-          if (( $(echo "$COVERAGE < 65" | bc -l) )); then
-            echo "Coverage ${COVERAGE}% is below 65% threshold"
+          # cmd/abx (main only) and runtime (Docker SDK calls) excluded —
+          # they require a live container daemon and cannot be unit-tested.
+          if (( $(echo "$COVERAGE < 70" | bc -l) )); then
+            echo "Coverage ${COVERAGE}% is below 70% threshold"
             exit 1
           fi
 
