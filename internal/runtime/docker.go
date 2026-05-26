@@ -91,8 +91,15 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec)
 	mounts := make([]dockermount.Mount, 0, len(spec.Binds))
 	for _, bind := range spec.Binds {
 		src, dst, opts := parseBind(bind)
+
+		// Named volumes (no '/') use TypeVolume; host paths use TypeBind.
+		mountType := dockermount.TypeBind
+		if !strings.Contains(src, "/") {
+			mountType = dockermount.TypeVolume
+		}
+
 		mount := dockermount.Mount{
-			Type:   dockermount.TypeBind,
+			Type:   mountType,
 			Source: src,
 			Target: dst,
 		}
