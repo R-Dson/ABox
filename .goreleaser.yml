@@ -37,3 +37,5 @@ release:
   github:
     owner: R-Dson
     name: ABox
+  replace_existing_artifacts: true
+  prerelease: auto
