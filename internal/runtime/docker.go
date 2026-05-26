@@ -90,17 +90,20 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec)
 
 	mounts := make([]dockermount.Mount, 0, len(spec.Binds))
 	for _, bind := range spec.Binds {
-		parts := strings.SplitN(bind, ":", 3)
-		src := parts[0]
-		dst := src
-		if len(parts) >= 2 {
-			dst = parts[1]
-		}
-		mounts = append(mounts, dockermount.Mount{
+		src, dst, opts := parseBind(bind)
+		mount := dockermount.Mount{
 			Type:   dockermount.TypeBind,
 			Source: src,
 			Target: dst,
-		})
+		}
+		for _, opt := range opts {
+			if opt == "ro" {
+				mount.ReadOnly = true
+			}
+			// "z" and "Z" are SELinux relabeling flags handled by
+			// the Docker daemon; no API field needed.
+		}
+		mounts = append(mounts, mount)
 	}
 
 	hostConfig := &dockercontainer.HostConfig{
@@ -232,4 +235,18 @@ func (d *dockerRuntime) Ping(ctx context.Context) error {
 		return fmt.Errorf("docker ping: %w", err)
 	}
 	return nil
+}
+
+// parseBind splits a bind string (src:dst[:opts]) into components.
+func parseBind(bind string) (src, dst string, opts []string) {
+	parts := strings.SplitN(bind, ":", 3)
+	src = parts[0]
+	dst = src
+	if len(parts) >= 2 {
+		dst = parts[1]
+	}
+	if len(parts) >= 3 {
+		opts = strings.Split(parts[2], ",")
+	}
+	return src, dst, opts
 }

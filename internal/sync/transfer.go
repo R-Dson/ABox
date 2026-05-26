@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/r-dson/abox/internal/exclusion"
 	"github.com/r-dson/abox/internal/runtime"
@@ -31,20 +32,20 @@ func (s *Syncer) SyncIn(ctx context.Context, srcDir, volumeName, dstPath string)
 		return nil
 	}
 
-	// Mount the volume in a short-lived sync container
 	containerID, cleanup, err := s.mountVolumeContainer(ctx, volumeName)
 	if err != nil {
 		return fmt.Errorf("mounting volume %s: %w", volumeName, err)
 	}
 	defer cleanup()
 
-	// Create a tar stream from the source directory
+	// Stream tar via pipe; CloseWithError propagates tar errors to the reader side.
 	pr, pw := io.Pipe()
 	go func() {
-		defer pw.Close()
 		if err := TarDir(srcDir, pw); err != nil {
-			slog.WarnContext(ctx, "tar creation failed", "error", err)
+			pw.CloseWithError(err)
+			return
 		}
+		pw.Close()
 	}()
 
 	stagingPath := dstPath + ".abx-tmp"
@@ -77,10 +78,11 @@ func (s *Syncer) SyncInFiltered(ctx context.Context, srcDir, volumeName, dstPath
 
 	pr, pw := io.Pipe()
 	go func() {
-		defer pw.Close()
 		if err := TarFiltered(srcDir, pw, matcher); err != nil {
-			slog.WarnContext(ctx, "filtered tar creation failed", "error", err)
+			pw.CloseWithError(err)
+			return
 		}
+		pw.Close()
 	}()
 
 	stagingPath := dstPath + ".abx-tmp"
@@ -227,7 +229,13 @@ func TarFiltered(dir string, w io.Writer, matcher *exclusion.Matcher) error {
 }
 
 // extractTar extracts a tar archive to the destination directory.
+// Validates that all extracted paths stay within dest to prevent path traversal.
 func extractTar(r io.Reader, dest string) error {
+	cleanDest := filepath.Clean(dest)
+	if !strings.HasSuffix(cleanDest, string(os.PathSeparator)) {
+		cleanDest += string(os.PathSeparator)
+	}
+
 	tr := tar.NewReader(r)
 	for {
 		header, err := tr.Next()
@@ -239,6 +247,11 @@ func extractTar(r io.Reader, dest string) error {
 		}
 
 		target := filepath.Join(dest, header.Name)
+
+		// Path traversal check: target must be under dest
+		if !strings.HasPrefix(filepath.Clean(target), cleanDest) {
+			return fmt.Errorf("tar entry %q escapes destination", header.Name)
+		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:

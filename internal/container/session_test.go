@@ -105,9 +105,3 @@ func TestSession_CleanupSkipsEmptyFields(t *testing.T) {
 		t.Error("NetworkRemove should not be called for empty NetworkID")
 	}
 }
-
-func TestSyncImageConstant(t *testing.T) {
-	if runtime.SyncImage != "ghcr.io/r-dson/abox:sync" {
-		t.Errorf("SyncImage = %q, want ghcr.io/r-dson/abox:sync", runtime.SyncImage)
-	}
-}

@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 )
@@ -10,17 +9,24 @@ import (
 // Detect auto-detects the container runtime.
 // It respects the ABOX_RUNTIME env var for explicit override,
 // then falls back to Docker, then Podman.
+// When both fail, the error includes diagnostic details from each.
 func Detect(ctx context.Context) (ContainerRuntime, error) {
 	if name := os.Getenv("ABOX_RUNTIME"); name != "" {
 		return detectNamed(ctx, name)
 	}
-	if rt, err := NewDocker(ctx); err == nil {
-		return rt, nil
+
+	dockerRT, dockerErr := NewDocker(ctx)
+	if dockerErr == nil {
+		return dockerRT, nil
 	}
-	if rt, err := NewPodman(ctx); err == nil {
-		return rt, nil
+
+	podmanRT, podmanErr := NewPodman(ctx)
+	if podmanErr == nil {
+		return podmanRT, nil
 	}
-	return nil, errors.New("neither Docker nor Podman is available or healthy")
+
+	return nil, fmt.Errorf("neither Docker nor Podman is available (docker: %v, podman: %v)",
+		dockerErr, podmanErr)
 }
 
 func detectNamed(ctx context.Context, name string) (ContainerRuntime, error) {

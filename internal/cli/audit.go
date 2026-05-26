@@ -24,6 +24,7 @@ func newAuditCmd() *cobra.Command {
 				return err
 			}
 
+			w := cmd.OutOrStdout()
 			for _, check := range result.Checks {
 				icon := "✓"
 				if check.Status == audit.Fail {
@@ -31,11 +32,11 @@ func newAuditCmd() *cobra.Command {
 				} else if check.Status == audit.Warn {
 					icon = "⚠"
 				}
-				fmt.Printf("%s %s", icon, check.Name)
+				fmt.Fprintf(w, "%s %s", icon, check.Name)
 				if check.Detail != "" {
-					fmt.Printf(": %s", check.Detail)
+					fmt.Fprintf(w, ": %s", check.Detail)
 				}
-				fmt.Println()
+				fmt.Fprintln(w)
 			}
 			return nil
 		},

@@ -2,6 +2,7 @@ package container_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -80,8 +81,4 @@ func TestNewSession_CleanupOnError(t *testing.T) {
 	}
 }
 
-var errTestFailed = errTestFailedType{}
-
-type errTestFailedType struct{}
-
-func (errTestFailedType) Error() string { return "test-induced failure" }
+var errTestFailed = errors.New("test-induced failure")

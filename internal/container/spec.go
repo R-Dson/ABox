@@ -2,6 +2,7 @@ package container
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -59,6 +60,7 @@ func BuildSpec(profile config.EditorProfile, sess *Session, workdir string, cfg 
 	}
 
 	spec.Binds = buildBinds(sess, workdir)
+	spec.NetworkMode = ResolveNetworkMode(sess, cfg)
 	return spec
 }
 
@@ -135,6 +137,7 @@ func dirExists(path string) bool {
 func parseMemoryBytes(s string) int64 {
 	b, err := units.RAMInBytes(s)
 	if err != nil {
+		slog.Debug("invalid memory limit, using no limit", "input", s, "error", err)
 		return 0
 	}
 	return b

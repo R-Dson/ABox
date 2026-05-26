@@ -71,7 +71,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.StrictNetwork, "strict-network", false, "block all external network access")
 	cmd.Flags().BoolVar(&opts.NoInternet, "no-internet", false, "disable networking entirely")
 	cmd.Flags().BoolVar(&opts.ForceSync, "force-sync", false, "overwrite host files even if modified during session")
-	cmd.Flags().StringVar(&opts.ExcludeURL, "exclude-url", "", "URL to fetch exclusion patterns from")
+	cmd.Flags().StringVar(&opts.ExcludeURL, "exclude-url", "", "URL to fetch exclusion patterns from (not yet implemented)")
 	cmd.Flags().StringArrayVar(&opts.ExtraEnv, "env", nil, "pass environment variable to container (repeatable)")
 
 	return cmd
@@ -88,7 +88,7 @@ func resolveEditorArgs(args []string) (dirArgs []string, editorArgs []string) {
 }
 
 func runSessionFromOpts(opts *RunOptions) func(*cobra.Command, []string) error {
-	return func(_ *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
 		dirArgs, editorArgs := resolveEditorArgs(args)
 		// Merge editor args from flags and from --
 		allEditorArgs := append(opts.EditorArgs, editorArgs...)
@@ -124,17 +124,36 @@ func runSessionFromOpts(opts *RunOptions) func(*cobra.Command, []string) error {
 			ExtraEnv:      extraEnv,
 		}
 
-		rt, err := runtime.Detect(context.Background())
+		rt, err := runtime.Detect(cmd.Context())
 		if err != nil {
 			return err
 		}
 
-		return RunSession(context.Background(), rt, absWorkdir, cfg)
+		return RunSession(cmd.Context(), rt, absWorkdir, cfg)
 	}
+}
+
+// blockedEnvKeys are environment variables that must never be injected
+// into the container from .abxenv — they control critical runtime behavior.
+var blockedEnvKeys = map[string]bool{
+	"PATH":                     true,
+	"HOME":                     true,
+	"USER":                     true,
+	"HOSTNAME":                 true,
+	"SHELL":                    true,
+	"UID":                      true,
+	"GID":                      true,
+	"PWD":                      true,
+	"LANG":                     true,
+	"TERM":                     true,
+	"DISPLAY":                  true,
+	"XAUTHORITY":               true,
+	"DBUS_SESSION_BUS_ADDRESS": true,
 }
 
 // LoadDotEnv reads a .abxenv file from the given directory.
 // Returns env key names (bare KEY or KEY=value both yield just the key).
+// Dangerous variable names (PATH, HOME, etc.) are silently skipped.
 // Returns nil if the file doesn't exist.
 func LoadDotEnv(dir string) []string {
 	path := filepath.Join(dir, ".abxenv")
@@ -152,7 +171,7 @@ func LoadDotEnv(dir string) []string {
 		}
 		key, _, _ := strings.Cut(line, "=")
 		key = strings.TrimSpace(key)
-		if key != "" {
+		if key != "" && !blockedEnvKeys[key] {
 			keys = append(keys, key)
 		}
 	}
@@ -268,11 +287,10 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 	if snap != nil {
 		conflicts := snap.DetectConflicts()
 		if len(conflicts) > 0 && !cfg.ForceSync {
-			slog.WarnContext(ctx, "files modified during session, skipping sync-out",
-				"count", len(conflicts), "force-sync", cfg.ForceSync)
-			for _, c := range conflicts {
-				slog.WarnContext(ctx, "conflict", "file", c)
-			}
+			summary, detail := sync.FormatConflicts(conflicts)
+			slog.WarnContext(ctx, "skipping sync-out: "+summary,
+				"force-sync", cfg.ForceSync)
+			slog.DebugContext(ctx, detail)
 			return &ExitError{Code: exitCode}
 		}
 	}
