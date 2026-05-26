@@ -28,7 +28,7 @@ func TestNewSession_CreatesAllVolumes(t *testing.T) {
 	cfg := &config.Config{Editor: "claude"}
 
 	mgr := container.NewManager(stub)
-	sess, err := mgr.CreateSession(t.Context(), profile, cfg)
+	sess, err := mgr.CreateSession(t.Context(), profile, cfg, false)
 	if err != nil {
 		t.Fatalf("CreateSession() error: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestNewSession_CleanupOnError(t *testing.T) {
 	cfg := &config.Config{Editor: "claude"}
 
 	mgr := container.NewManager(stub)
-	_, err := mgr.CreateSession(t.Context(), profile, cfg)
+	_, err := mgr.CreateSession(t.Context(), profile, cfg, false)
 	if err == nil {
 		t.Fatal("expected error when volume creation fails")
 	}

@@ -20,6 +20,7 @@ func newConfigCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(newSetEditorCmd())
+	cmd.AddCommand(newSetExcludeURLCmd())
 	cmd.AddCommand(newListEditorsCmd())
 
 	return cmd
@@ -69,6 +70,27 @@ func newSetEditorCmd() *cobra.Command {
 			}
 
 			return writeConfigField(cfgPath, "editor", name)
+		},
+	}
+
+	cmd.Flags().StringVar(&cfgPath, "config", "", "config file path (default: $XDG_CONFIG_HOME/abx/config.json)")
+
+	return cmd
+}
+
+func newSetExcludeURLCmd() *cobra.Command {
+	var cfgPath string
+
+	cmd := &cobra.Command{
+		Use:   "set-exclude-url <url>",
+		Short: "Set the default exclusion pattern URL",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if cfgPath == "" {
+				dir, _ := os.UserConfigDir()
+				cfgPath = dir + "/abx/config.json"
+			}
+			return writeConfigField(cfgPath, "exclude_url", args[0])
 		},
 	}
 

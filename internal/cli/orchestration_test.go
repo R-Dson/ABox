@@ -83,12 +83,13 @@ func TestRunSession_CleansUpOnVolumeFailure(t *testing.T) {
 // --- callRecorder wraps StubRuntime with method call recording ---
 
 type callRecorder struct {
-	mu       sync.Mutex
-	calls    []string
-	exitCode int64
-	failOn   string
-	nextID   int
-	s        runtime.StubRuntime
+	mu        sync.Mutex
+	calls     []string
+	exitCode  int64
+	failOn    string
+	nextID    int
+	waitCount int
+	s         runtime.StubRuntime
 }
 
 func newCallRecorder() *callRecorder {
@@ -127,6 +128,12 @@ func newCallRecorder() *callRecorder {
 		},
 		ContainerWaitFn: func(_ context.Context, _ string) (int64, error) {
 			r.add("ContainerWait")
+			// Bootstrap containers must succeed (exit 0)
+			// Only return custom exit code after bootstrap phase
+			if r.exitCode != 0 && r.waitCount == 0 {
+				r.waitCount++
+				return 0, nil
+			}
 			return r.exitCode, r.shouldFail("ContainerWait")
 		},
 		ContainerRemoveFn: func(_ context.Context, _ string, _ bool) error {

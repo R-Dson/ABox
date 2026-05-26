@@ -38,7 +38,7 @@ func TestManager_RunCreatesAndStartsContainer(t *testing.T) {
 	cfg := &config.Config{Editor: "claude"}
 
 	mgr := container.NewManager(stub)
-	sess, _ := mgr.CreateSession(t.Context(), profile, cfg)
+	sess, _ := mgr.CreateSession(t.Context(), profile, cfg, false)
 	defer sess.Cleanup(t.Context())
 
 	spec := container.BuildSpec(profile, sess, "/workspace", cfg)

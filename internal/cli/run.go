@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/r-dson/abox/internal/config"
 	"github.com/r-dson/abox/internal/container"
@@ -13,6 +15,7 @@ import (
 	"github.com/r-dson/abox/internal/runtime"
 	"github.com/r-dson/abox/internal/sync"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 // RunOptions holds all CLI flags for the run command.
@@ -38,6 +41,8 @@ type SessionConfig struct {
 	ExcludeURL    string
 	Offline       bool
 	Shell         bool
+	EditorArgs    []string
+	ExtraEnv      []string
 }
 
 // ExitError wraps an exit code from the container process.
@@ -52,10 +57,10 @@ func (e *ExitError) Error() string {
 func newRunCmd() *cobra.Command {
 	opts := &RunOptions{}
 	cmd := &cobra.Command{
-		Use:   "run [directory]",
+		Use:   "run [directory] [-- editor-args...]",
 		Short: "Run an editor in a secure sandbox",
 		Long:  "Launch an AI coding editor inside an isolated container with workspace sync and exclusion filtering.",
-		Args:  cobra.MaximumNArgs(1),
+		Args:  cobra.MinimumNArgs(0),
 		RunE:  runSessionFromOpts(opts),
 	}
 
@@ -72,11 +77,28 @@ func newRunCmd() *cobra.Command {
 	return cmd
 }
 
+// resolveEditorArgs splits args into directory args and editor args at "--".
+func resolveEditorArgs(args []string) (dirArgs []string, editorArgs []string) {
+	for i, a := range args {
+		if a == "--" {
+			return args[:i], args[i+1:]
+		}
+	}
+	return args, nil
+}
+
 func runSessionFromOpts(opts *RunOptions) func(*cobra.Command, []string) error {
 	return func(_ *cobra.Command, args []string) error {
+		dirArgs, editorArgs := resolveEditorArgs(args)
+		// Merge editor args from flags and from --
+		allEditorArgs := append(opts.EditorArgs, editorArgs...)
+
+		// Collect extra env from --env flags and .abxenv
+		extraEnv := opts.ExtraEnv
+
 		workdir := "."
-		if len(args) > 0 {
-			workdir = args[0]
+		if len(dirArgs) > 0 {
+			workdir = dirArgs[0]
 		}
 		absWorkdir, err := filepath.Abs(workdir)
 		if err != nil {
@@ -87,6 +109,9 @@ func runSessionFromOpts(opts *RunOptions) func(*cobra.Command, []string) error {
 			return err
 		}
 
+		// Load .abxenv from workspace
+		extraEnv = append(extraEnv, LoadDotEnv(absWorkdir)...)
+
 		cfg := &SessionConfig{
 			Editor:        opts.Editor,
 			StrictNetwork: opts.StrictNetwork,
@@ -95,6 +120,8 @@ func runSessionFromOpts(opts *RunOptions) func(*cobra.Command, []string) error {
 			ExcludeURL:    opts.ExcludeURL,
 			Offline:       opts.Offline,
 			Shell:         opts.Shell,
+			EditorArgs:    allEditorArgs,
+			ExtraEnv:      extraEnv,
 		}
 
 		rt, err := runtime.Detect(context.Background())
@@ -104,6 +131,32 @@ func runSessionFromOpts(opts *RunOptions) func(*cobra.Command, []string) error {
 
 		return RunSession(context.Background(), rt, absWorkdir, cfg)
 	}
+}
+
+// LoadDotEnv reads a .abxenv file from the given directory.
+// Returns env key names (bare KEY or KEY=value both yield just the key).
+// Returns nil if the file doesn't exist.
+func LoadDotEnv(dir string) []string {
+	path := filepath.Join(dir, ".abxenv")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	var keys []string
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, _, _ := strings.Cut(line, "=")
+		key = strings.TrimSpace(key)
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	return keys
 }
 
 // RunSession runs the full session orchestration with the given runtime.
@@ -125,19 +178,20 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		return fmt.Errorf("resolving editor: %w", err)
 	}
 
-	// 2. Build exclusion matcher (used for workspace SyncIn with filtering)
-	_, err = exclusion.BuildMatcher(ctx, workdir, cfg.ExcludeURL)
+	// 2. Build exclusion matcher
+	matcher, err := exclusion.BuildMatcher(ctx, workdir, cfg.ExcludeURL)
 	if err != nil {
 		return fmt.Errorf("building exclusion matcher: %w", err)
 	}
 
 	// 3. Create container session (volumes, optional strict network)
+	hasWorkspaceVol := matcher.HasPatterns()
 	mgr := container.NewManager(rt)
 	sess, err := mgr.CreateSession(ctx, profile, &config.Config{
 		Editor:        editorName,
 		StrictNetwork: cfg.StrictNetwork,
 		NoInternet:    cfg.NoInternet,
-	})
+	}, hasWorkspaceVol)
 	if err != nil {
 		return fmt.Errorf("creating session: %w", err)
 	}
@@ -152,7 +206,7 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		snap = nil
 	}
 
-	// 5. SyncIn: host → container volumes
+	// 5. SyncIn: host → container volumes (parallel)
 	syncer := sync.NewSyncer(rt)
 
 	syncDirs := map[string]string{
@@ -162,10 +216,30 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		sess.ShareVol():  profile.SharePath(home),
 	}
 
+	g, gctx := errgroup.WithContext(ctx)
 	for vol, srcDir := range syncDirs {
-		if err := syncer.SyncIn(ctx, srcDir, vol, "/data"); err != nil {
-			return fmt.Errorf("sync-in %s: %w", srcDir, err)
-		}
+		vol, srcDir := vol, srcDir
+		g.Go(func() error {
+			if err := syncer.SyncIn(gctx, srcDir, vol, "/data"); err != nil {
+				return fmt.Errorf("sync-in %s: %w", srcDir, err)
+			}
+			return nil
+		})
+	}
+
+	// Workspace sync with exclusion filtering
+	if sess.WorkspaceVol() != "" {
+		wsVol := sess.WorkspaceVol()
+		g.Go(func() error {
+			if err := syncer.SyncInFiltered(gctx, workdir, wsVol, "/data", matcher); err != nil {
+				return fmt.Errorf("workspace sync-in: %w", err)
+			}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return fmt.Errorf("parallel sync-in: %w", err)
 	}
 
 	// 6. Build spec and run the editor container
@@ -175,8 +249,14 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		NoInternet:    cfg.NoInternet,
 	})
 
+	if len(cfg.ExtraEnv) > 0 {
+		spec.Env = append(spec.Env, resolveEnvKeys(cfg.ExtraEnv)...)
+	}
+
 	if cfg.Shell {
 		spec.Cmd = []string{"/bin/sh"}
+	} else if len(cfg.EditorArgs) > 0 {
+		spec.Cmd = append(spec.Cmd, cfg.EditorArgs...)
 	}
 
 	exitCode, err := mgr.Run(ctx, spec)
@@ -197,14 +277,31 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		}
 	}
 
-	// 8. SyncOut: container → host
+	// 8. SyncOut: container → host (parallel, best-effort)
+	g, _ = errgroup.WithContext(ctx)
 	for vol, srcDir := range syncDirs {
-		if err := syncer.SyncOut(ctx, vol, "/data", srcDir); err != nil {
-			slog.WarnContext(ctx, "sync-out failed", "dir", srcDir, "error", err)
-		}
+		vol, srcDir := vol, srcDir
+		g.Go(func() error {
+			if err := syncer.SyncOut(ctx, vol, "/data", srcDir); err != nil {
+				slog.WarnContext(ctx, "sync-out failed", "dir", srcDir, "error", err)
+			}
+			return nil
+		})
 	}
+	_ = g.Wait()
 
 	return &ExitError{Code: exitCode}
+}
+
+// resolveEnvKeys looks up env keys from the host and returns KEY=VALUE pairs.
+func resolveEnvKeys(keys []string) []string {
+	var env []string
+	for _, key := range keys {
+		if val, ok := os.LookupEnv(key); ok {
+			env = append(env, key+"="+val)
+		}
+	}
+	return env
 }
 
 // ValidateWorkdir rejects unsafe workspace paths.

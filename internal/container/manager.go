@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strconv"
 	"time"
 
@@ -24,13 +25,18 @@ func NewManager(rt runtime.ContainerRuntime) *Manager {
 
 // CreateSession creates volumes, bootstraps ownership, and optionally sets up
 // strict networking. Returns a session that the caller must clean up.
-func (m *Manager) CreateSession(ctx context.Context, profile config.EditorProfile, cfg *config.Config) (*Session, error) {
+// If hasWorkspaceVol is true, a 5th workspace volume is created for exclusion-filtered sync.
+func (m *Manager) CreateSession(ctx context.Context, profile config.EditorProfile, cfg *config.Config, hasWorkspaceVol bool) (*Session, error) {
 	id := strconv.FormatInt(time.Now().UnixNano(), 10)
 	vols := SessionVolumes{
 		ConfigVol: "abox-config-" + id,
 		CacheVol:  "abox-cache-" + id,
 		StateVol:  "abox-state-" + id,
 		ShareVol:  "abox-share-" + id,
+	}
+
+	if hasWorkspaceVol {
+		vols.WorkspaceVol = "abox-workspace-" + id
 	}
 
 	labels := map[string]string{
@@ -46,13 +52,18 @@ func (m *Manager) CreateSession(ctx context.Context, profile config.EditorProfil
 		})
 	}
 	if err := g.Wait(); err != nil {
-		// Attempt cleanup of any volumes that were created
 		sess := NewSession(id, m.rt, vols)
 		sess.Cleanup(ctx)
 		return nil, fmt.Errorf("creating volumes: %w", err)
 	}
 
 	sess := NewSession(id, m.rt, vols)
+
+	// Bootstrap volume ownership using sync image
+	if err := m.bootstrapOwnership(ctx, sess); err != nil {
+		sess.Cleanup(ctx)
+		return nil, fmt.Errorf("bootstrapping ownership: %w", err)
+	}
 
 	// Create strict network if requested
 	if cfg.StrictNetwork {
@@ -66,6 +77,75 @@ func (m *Manager) CreateSession(ctx context.Context, profile config.EditorProfil
 	}
 
 	return sess, nil
+}
+
+// bootstrapOwnership runs a short-lived container as root with the sync image
+// to chown all volume mount paths to the host user's UID:GID.
+func (m *Manager) bootstrapOwnership(ctx context.Context, sess *Session) error {
+	uid, gid := os.Getuid(), os.Getgid()
+
+	// Build bind mounts for all volumes
+	type volMount struct {
+		name   string
+		target string
+	}
+	mounts := []volMount{
+		{sess.ConfigVol(), "/vol/config"},
+		{sess.CacheVol(), "/vol/cache"},
+		{sess.StateVol(), "/vol/state"},
+		{sess.ShareVol(), "/vol/share"},
+	}
+
+	var chownTargets []string
+	var bindMounts []string
+	for _, m := range mounts {
+		bindMounts = append(bindMounts, m.name+":"+m.target)
+		chownTargets = append(chownTargets, m.target)
+	}
+	if sess.WorkspaceVol() != "" {
+		bindMounts = append(bindMounts, sess.WorkspaceVol()+":/vol/workspace")
+		chownTargets = append(chownTargets, "/vol/workspace")
+	}
+
+	// Join targets for the chown command
+	targetStr := ""
+	for _, t := range chownTargets {
+		targetStr += t + " "
+	}
+
+	spec := runtime.ContainerSpec{
+		Image:      runtime.SyncImage,
+		Cmd:        []string{"sh", "-c", fmt.Sprintf("chown -R %d:%d %s", uid, gid, targetStr)},
+		User:       "0:0",
+		Binds:      bindMounts,
+		AutoRemove: true,
+		CapDrop:    []string{"ALL"},
+		CapAdd:     []string{"CHOWN"},
+	}
+
+	return m.runEphemeral(ctx, spec, "bootstrap")
+}
+
+// runEphemeral creates, starts, waits, and removes a container.
+func (m *Manager) runEphemeral(ctx context.Context, spec runtime.ContainerSpec, purpose string) error {
+	id, err := m.rt.ContainerCreate(ctx, spec)
+	if err != nil {
+		return fmt.Errorf("%s create: %w", purpose, err)
+	}
+	defer func() { _ = m.rt.ContainerRemove(context.Background(), id, true) }()
+
+	if err := m.rt.ContainerStart(ctx, id); err != nil {
+		return fmt.Errorf("%s start: %w", purpose, err)
+	}
+
+	code, err := m.rt.ContainerWait(ctx, id)
+	if err != nil {
+		return fmt.Errorf("%s wait: %w", purpose, err)
+	}
+	if code != 0 {
+		return fmt.Errorf("%s exited with code %d", purpose, code)
+	}
+	return nil
 }
 
 // Run creates, starts, and waits for a container to complete.

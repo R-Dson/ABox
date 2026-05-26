@@ -61,6 +61,41 @@ func (s *Syncer) SyncIn(ctx context.Context, srcDir, volumeName, dstPath string)
 	return nil
 }
 
+// SyncInFiltered transfers files from a host directory to a container volume,
+// excluding files and directories matching the exclusion patterns.
+func (s *Syncer) SyncInFiltered(ctx context.Context, srcDir, volumeName, dstPath string, matcher *exclusion.Matcher) error {
+	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+		slog.DebugContext(ctx, "sync source does not exist, skipping", "path", srcDir)
+		return nil
+	}
+
+	containerID, cleanup, err := s.mountVolumeContainer(ctx, volumeName)
+	if err != nil {
+		return fmt.Errorf("mounting volume %s: %w", volumeName, err)
+	}
+	defer cleanup()
+
+	pr, pw := io.Pipe()
+	go func() {
+		defer pw.Close()
+		if err := TarFiltered(srcDir, pw, matcher); err != nil {
+			slog.WarnContext(ctx, "filtered tar creation failed", "error", err)
+		}
+	}()
+
+	stagingPath := dstPath + ".abx-tmp"
+	if err := s.rt.CopyToContainer(ctx, containerID, stagingPath, pr); err != nil {
+		return fmt.Errorf("streaming filtered %s to volume: %w", srcDir, err)
+	}
+
+	if _, err := s.rt.ContainerExec(ctx, containerID,
+		[]string{"mv", "-T", stagingPath, dstPath}); err != nil {
+		return fmt.Errorf("atomic rename in volume: %w", err)
+	}
+
+	return nil
+}
+
 // SyncOut transfers files from a container volume to a host directory.
 // It copies a tar archive from the container, then extracts it to destDir.
 // Skips if destDir doesn't exist.

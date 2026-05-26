@@ -23,7 +23,7 @@ func TestCreateSession_StrictNetwork(t *testing.T) {
 	cfg := &config.Config{Editor: "claude", StrictNetwork: true}
 
 	mgr := container.NewManager(stub)
-	sess, err := mgr.CreateSession(t.Context(), profile, cfg)
+	sess, err := mgr.CreateSession(t.Context(), profile, cfg, false)
 	if err != nil {
 		t.Fatalf("CreateSession() error: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestCreateSession_NoNetworkByDefault(t *testing.T) {
 	cfg := &config.Config{Editor: "claude"}
 
 	mgr := container.NewManager(stub)
-	sess, err := mgr.CreateSession(t.Context(), profile, cfg)
+	sess, err := mgr.CreateSession(t.Context(), profile, cfg, false)
 	if err != nil {
 		t.Fatalf("CreateSession() error: %v", err)
 	}
