@@ -25,13 +25,6 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
-signs:
-  - artifacts: checksum
-    args: ["--batch", "-u", "{{ .Env.GPG_FINGERPRINT }}", "--output", "${signature}", "--detach-sign", "${artifact}"]
-
-sboms:
-  - artifacts: archive
-
 changelog:
   sort: asc
   filters:
@@ -44,15 +37,3 @@ release:
   github:
     owner: R-Dson
     name: ABox
-
-brews:
-  - repository:
-      owner: R-Dson
-      name: homebrew-tap
-    directory: Formula
-    homepage: "https://github.com/R-Dson/ABox"
-    description: "Secure AI coding editor sandbox"
-    test:
-      system "#{bin}/abx version"
-    install: |
-      bin.install "abx"
