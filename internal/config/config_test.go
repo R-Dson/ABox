@@ -25,7 +25,7 @@ func TestEditorRegistry_Names(t *testing.T) {
 		t.Fatalf("LoadEditorRegistry() error: %v", err)
 	}
 
-	expected := []string{"aider", "claude", "codex", "copilot", "gemini", "goose", "opencode", "vibe"}
+	expected := []string{"aider", "claude", "codex", "copilot", "gemini", "goose", "opencode", "pi", "vibe"}
 	names := registry.Names()
 
 	if len(names) != len(expected) {

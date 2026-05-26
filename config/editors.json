@@ -63,6 +63,15 @@
       "env_vars": [],
       "legacy_path": ""
     },
+    "pi": {
+      "version": "0.75.5",
+      "install_cmd": "npm install -g --ignore-scripts @earendil-works/pi-coding-agent@{version}",
+      "cmd_name": "pi",
+      "image_tag": "ghcr.io/r-dson/abox:pi",
+      "config_path": ".pi",
+      "env_vars": ["ANTHROPIC_API_KEY", "ANTHROPIC_OAUTH_TOKEN", "OPENAI_API_KEY", "AZURE_OPENAI_API_KEY", "GEMINI_API_KEY"],
+      "legacy_path": ""
+    },
     "gemini": {
       "version": "0.45.2",
       "install_cmd": "npm install -g @google/gemini-cli@{version}",
