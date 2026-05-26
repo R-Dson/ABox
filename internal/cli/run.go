@@ -14,7 +14,6 @@ import (
 	"github.com/r-dson/abox/internal/exclusion"
 	"github.com/r-dson/abox/internal/runtime"
 	"github.com/r-dson/abox/internal/sync"
-	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -39,49 +38,6 @@ type ExitError struct {
 
 func (e *ExitError) Error() string {
 	return fmt.Sprintf("exit code %d", e.Code)
-}
-
-func newRunCmd() *cobra.Command {
-	cfg := &SessionConfig{}
-	cmd := &cobra.Command{
-		Use:   "run [directory]",
-		Short: "Run an editor in a secure sandbox",
-		Long:  "Launch an AI coding editor inside an isolated container with workspace sync and exclusion filtering.",
-		Args:  cobra.MinimumNArgs(0),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			workdir := "."
-			if len(args) > 0 {
-				workdir = args[0]
-			}
-			absWorkdir, err := filepath.Abs(workdir)
-			if err != nil {
-				return fmt.Errorf("resolving workdir: %w", err)
-			}
-			if err := ValidateWorkdir(absWorkdir); err != nil {
-				return err
-			}
-
-			// Load .abxenv from workspace and merge with --env flags
-			cfg.ExtraEnv = append(cfg.ExtraEnv, LoadDotEnv(absWorkdir)...)
-
-			rt, err := runtime.Detect(cmd.Context())
-			if err != nil {
-				return err
-			}
-			return RunSession(cmd.Context(), rt, absWorkdir, cfg)
-		},
-	}
-
-	cmd.Flags().StringVar(&cfg.Editor, "editor", "", "editor to use (aider|claude|codex|copilot|gemini|goose|opencode|vibe)")
-	cmd.Flags().BoolVar(&cfg.Shell, "shell", false, "drop into an interactive shell")
-	cmd.Flags().BoolVar(&cfg.ForceIT, "force-it", false, "force interactive TTY allocation")
-	cmd.Flags().BoolVar(&cfg.Offline, "offline", false, "do not pull images")
-	cmd.Flags().BoolVar(&cfg.StrictNetwork, "strict-network", false, "block all external network access")
-	cmd.Flags().BoolVar(&cfg.NoInternet, "no-internet", false, "disable networking entirely")
-	cmd.Flags().BoolVar(&cfg.ForceSync, "force-sync", false, "overwrite host files even if modified during session")
-	cmd.Flags().StringArrayVar(&cfg.ExtraEnv, "env", nil, "pass environment variable to container (repeatable)")
-
-	return cmd
 }
 
 // blockedEnvKeys are environment variables that must never be injected

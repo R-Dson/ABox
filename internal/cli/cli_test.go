@@ -7,21 +7,7 @@ import (
 	"github.com/r-dson/abox/internal/cli"
 )
 
-func TestRunCmd_Exists(t *testing.T) {
-	root := cli.NewRootCmd("test")
-	found := false
-	for _, cmd := range root.Commands() {
-		if cmd.Name() == "run" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("run subcommand not registered on root")
-	}
-}
-
-func TestRunCmd_Flags(t *testing.T) {
+func TestRootCmd_HasRunFlags(t *testing.T) {
 	root := cli.NewRootCmd("test")
 
 	tests := []struct {
@@ -40,18 +26,34 @@ func TestRunCmd_Flags(t *testing.T) {
 		t.Run(tt.flag, func(t *testing.T) {
 			f := root.Flags().Lookup(tt.flag)
 			if f == nil {
-				// Check run subcommand flags
-				for _, cmd := range root.Commands() {
-					if cmd.Name() == "run" {
-						f = cmd.Flags().Lookup(tt.flag)
-						break
-					}
-				}
-			}
-			if f == nil {
-				t.Errorf("flag --%s not found", tt.flag)
+				t.Errorf("flag --%s not found on root", tt.flag)
 			}
 		})
+	}
+}
+
+func TestRootCmd_HasSubcommands(t *testing.T) {
+	root := cli.NewRootCmd("test")
+
+	expected := []string{"audit", "completion", "config", "version"}
+	for _, name := range expected {
+		found := false
+		for _, cmd := range root.Commands() {
+			if cmd.Name() == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("subcommand %q not registered on root", name)
+		}
+	}
+}
+
+func TestRootCmd_RunE(t *testing.T) {
+	root := cli.NewRootCmd("test")
+	if root.RunE == nil {
+		t.Error("root should have RunE set (run is the default action)")
 	}
 }
 
@@ -66,10 +68,8 @@ func TestVersionCmd(t *testing.T) {
 		t.Fatalf("version command error: %v", err)
 	}
 
-	// Version cmd uses fmt.Printf directly — capture via SetOut
 	output := buf.String()
 	if output == "" {
-		// fmt.Printf bypasses cobra's output writer, so just verify no error
 		return
 	}
 	if !bytes.Contains([]byte(output), []byte("1.0.0-test")) {

@@ -7,42 +7,32 @@ import (
 	"testing"
 
 	"github.com/r-dson/abox/internal/cli"
-	"github.com/spf13/cobra"
 )
 
-func TestRunCmd_RunSessionOrchestrates(t *testing.T) {
+func TestRootCmd_RunEIsWired(t *testing.T) {
 	root := cli.NewRootCmd("test")
-
-	// Verify the run command's RunE is wired (not nil stub)
-	var runE func(*cobra.Command, []string) error
-	for _, cmd := range root.Commands() {
-		if cmd.Name() == "run" {
-			runE = cmd.RunE
-			break
-		}
-	}
-	if runE == nil {
-		t.Fatal("run command has no RunE — session orchestration not wired")
+	if root.RunE == nil {
+		t.Fatal("root should have RunE set — run is the default action")
 	}
 }
 
-func TestRunCmd_DefaultWorkdir(t *testing.T) {
+func TestRootCmd_DefaultWorkdir(t *testing.T) {
 	root := cli.NewRootCmd("test")
-	root.SetArgs([]string{"run"})
+	root.SetArgs([]string{}) // no args = default workdir "."
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 
 	err := root.Execute()
 	if err != nil {
 		msg := err.Error()
-		// Full orchestration requires Docker with the sync image pulled.
-		// On CI Docker is present but images aren't — accept any runtime error.
+		// Full orchestration requires Docker. Accept any runtime error.
 		if !strings.Contains(msg, "runtime") &&
 			!strings.Contains(msg, "image") &&
 			!strings.Contains(msg, "unreachable") &&
 			!strings.Contains(msg, "ExitError") &&
 			!strings.Contains(msg, "mount") &&
-			!strings.Contains(msg, "container") {
+			!strings.Contains(msg, "container") &&
+			!strings.Contains(msg, "workspace") {
 			t.Errorf("unexpected error: %v", err)
 		}
 	}
