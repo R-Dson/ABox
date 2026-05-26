@@ -34,7 +34,6 @@ func TestRunCmd_Flags(t *testing.T) {
 		{"strict-network"},
 		{"no-internet"},
 		{"force-sync"},
-		{"exclude-url"},
 	}
 
 	for _, tt := range tests {

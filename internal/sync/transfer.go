@@ -14,68 +14,22 @@ import (
 	"github.com/r-dson/abox/internal/runtime"
 )
 
-// Syncer handles data transfer between host and container volumes.
-type Syncer struct {
-	rt runtime.ContainerRuntime
-}
-
-// NewSyncer creates a new Syncer with the given container runtime.
-func NewSyncer(rt runtime.ContainerRuntime) *Syncer {
-	return &Syncer{rt: rt}
-}
-
 // SyncIn transfers files from a host directory to a container volume.
+// If matcher is non-nil, files matching the exclusion patterns are skipped.
 // Skips if the source directory doesn't exist.
-func (s *Syncer) SyncIn(ctx context.Context, srcDir, volumeName, dstPath string) error {
+func In(ctx context.Context, rt runtime.ContainerRuntime, srcDir, volumeName, dstPath string, matcher *exclusion.Matcher) error {
 	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
 		slog.DebugContext(ctx, "sync source does not exist, skipping", "path", srcDir)
 		return nil
 	}
 
-	containerID, cleanup, err := s.mountVolumeContainer(ctx, volumeName)
+	containerID, cleanup, err := mountVolumeContainer(ctx, rt, volumeName)
 	if err != nil {
 		return fmt.Errorf("mounting volume %s: %w", volumeName, err)
 	}
 	defer cleanup()
 
 	// Stream tar via pipe; CloseWithError propagates tar errors to the reader side.
-	pr, pw := io.Pipe()
-	go func() {
-		if err := TarDir(srcDir, pw); err != nil {
-			pw.CloseWithError(err)
-			return
-		}
-		pw.Close()
-	}()
-
-	stagingPath := dstPath + ".abx-tmp"
-	if err := s.rt.CopyToContainer(ctx, containerID, stagingPath, pr); err != nil {
-		return fmt.Errorf("streaming %s to volume: %w", srcDir, err)
-	}
-
-	// Atomic rename inside the container
-	if _, err := s.rt.ContainerExec(ctx, containerID,
-		[]string{"mv", "-T", stagingPath, dstPath}); err != nil {
-		return fmt.Errorf("atomic rename in volume: %w", err)
-	}
-
-	return nil
-}
-
-// SyncInFiltered transfers files from a host directory to a container volume,
-// excluding files and directories matching the exclusion patterns.
-func (s *Syncer) SyncInFiltered(ctx context.Context, srcDir, volumeName, dstPath string, matcher *exclusion.Matcher) error {
-	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
-		slog.DebugContext(ctx, "sync source does not exist, skipping", "path", srcDir)
-		return nil
-	}
-
-	containerID, cleanup, err := s.mountVolumeContainer(ctx, volumeName)
-	if err != nil {
-		return fmt.Errorf("mounting volume %s: %w", volumeName, err)
-	}
-	defer cleanup()
-
 	pr, pw := io.Pipe()
 	go func() {
 		if err := TarFiltered(srcDir, pw, matcher); err != nil {
@@ -86,11 +40,12 @@ func (s *Syncer) SyncInFiltered(ctx context.Context, srcDir, volumeName, dstPath
 	}()
 
 	stagingPath := dstPath + ".abx-tmp"
-	if err := s.rt.CopyToContainer(ctx, containerID, stagingPath, pr); err != nil {
-		return fmt.Errorf("streaming filtered %s to volume: %w", srcDir, err)
+	if err := rt.CopyToContainer(ctx, containerID, stagingPath, pr); err != nil {
+		return fmt.Errorf("streaming %s to volume: %w", srcDir, err)
 	}
 
-	if _, err := s.rt.ContainerExec(ctx, containerID,
+	// Atomic rename inside the container
+	if _, err := rt.ContainerExec(ctx, containerID,
 		[]string{"mv", "-T", stagingPath, dstPath}); err != nil {
 		return fmt.Errorf("atomic rename in volume: %w", err)
 	}
@@ -101,19 +56,19 @@ func (s *Syncer) SyncInFiltered(ctx context.Context, srcDir, volumeName, dstPath
 // SyncOut transfers files from a container volume to a host directory.
 // It copies a tar archive from the container, then extracts it to destDir.
 // Skips if destDir doesn't exist.
-func (s *Syncer) SyncOut(ctx context.Context, volumeName, srcPath, destDir string) error {
+func Out(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, destDir string) error {
 	if _, err := os.Stat(destDir); os.IsNotExist(err) {
 		slog.DebugContext(ctx, "sync dest does not exist, skipping", "path", destDir)
 		return nil
 	}
 
-	containerID, cleanup, err := s.mountVolumeContainer(ctx, volumeName)
+	containerID, cleanup, err := mountVolumeContainer(ctx, rt, volumeName)
 	if err != nil {
 		return fmt.Errorf("mounting volume %s: %w", volumeName, err)
 	}
 	defer cleanup()
 
-	stream, err := s.rt.CopyFromContainer(ctx, containerID, srcPath)
+	stream, err := rt.CopyFromContainer(ctx, containerID, srcPath)
 	if err != nil {
 		return fmt.Errorf("copying from container: %w", err)
 	}
@@ -128,7 +83,7 @@ func (s *Syncer) SyncOut(ctx context.Context, volumeName, srcPath, destDir strin
 
 // mountVolumeContainer creates a short-lived container with the volume mounted.
 // Returns the container ID and a cleanup function.
-func (s *Syncer) mountVolumeContainer(ctx context.Context, volumeName string) (string, func(), error) {
+func mountVolumeContainer(ctx context.Context, rt runtime.ContainerRuntime, volumeName string) (string, func(), error) {
 	spec := runtime.ContainerSpec{
 		Image:      runtime.SyncImage,
 		Cmd:        []string{"sleep", "300"},
@@ -138,28 +93,21 @@ func (s *Syncer) mountVolumeContainer(ctx context.Context, volumeName string) (s
 		CapAdd:     []string{"CHOWN"},
 	}
 
-	id, err := s.rt.ContainerCreate(ctx, spec)
+	id, err := rt.ContainerCreate(ctx, spec)
 	if err != nil {
 		return "", nil, fmt.Errorf("creating sync container: %w", err)
 	}
 
-	if err := s.rt.ContainerStart(ctx, id); err != nil {
-		_ = s.rt.ContainerRemove(ctx, id, true)
+	if err := rt.ContainerStart(ctx, id); err != nil {
+		_ = rt.ContainerRemove(ctx, id, true)
 		return "", nil, fmt.Errorf("starting sync container: %w", err)
 	}
 
 	cleanup := func() {
-		_ = s.rt.ContainerRemove(context.Background(), id, true)
+		_ = rt.ContainerRemove(context.Background(), id, true)
 	}
 
 	return id, cleanup, nil
-}
-
-// TarDir writes a tar archive of the directory contents to the writer.
-// Files are stored with paths relative to dir.
-// Equivalent to TarFiltered with a nil matcher (all files included).
-func TarDir(dir string, w io.Writer) error {
-	return TarFiltered(dir, w, nil)
 }
 
 // TarFiltered writes a tar archive of the directory contents to the writer,

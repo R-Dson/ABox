@@ -13,22 +13,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Manager orchestrates container sessions.
-type Manager struct {
-	rt runtime.ContainerRuntime
-}
-
-// NewManager creates a new container Manager.
-func NewManager(rt runtime.ContainerRuntime) *Manager {
-	return &Manager{rt: rt}
-}
-
 // CreateSession creates volumes, bootstraps ownership, and optionally sets up
 // strict networking. Returns a session that the caller must clean up.
 // If hasWorkspaceVol is true, a 5th workspace volume is created for exclusion-filtered sync.
-func (m *Manager) CreateSession(ctx context.Context, profile config.EditorProfile, cfg *config.Config, hasWorkspaceVol bool) (*Session, error) {
+func CreateSession(ctx context.Context, rt runtime.ContainerRuntime, profile config.EditorProfile, cfg *config.Config, hasWorkspaceVol bool) (*Session, error) {
 	id := strconv.FormatInt(time.Now().UnixNano(), 10)
-	vols := SessionVolumes{
+	vols := Volumes{
 		ConfigVol: "abox-config-" + id,
 		CacheVol:  "abox-cache-" + id,
 		StateVol:  "abox-state-" + id,
@@ -45,34 +35,34 @@ func (m *Manager) CreateSession(ctx context.Context, profile config.EditorProfil
 
 	// Create volumes in parallel
 	g, gctx := errgroup.WithContext(ctx)
-	for _, name := range vols.nonEmptyNames() {
+	for _, name := range vols.NonEmptyNames() {
 		name := name
 		g.Go(func() error {
-			return m.rt.VolumeCreate(gctx, name, labels)
+			return rt.VolumeCreate(gctx, name, labels)
 		})
 	}
 	if err := g.Wait(); err != nil {
-		sess := NewSession(id, m.rt, vols)
+		sess := NewSession(id, rt, vols)
 		sess.Cleanup(ctx)
 		return nil, fmt.Errorf("creating volumes: %w", err)
 	}
 
-	sess := NewSession(id, m.rt, vols)
+	sess := NewSession(id, rt, vols)
 
 	// Bootstrap volume ownership using sync image
-	if err := m.bootstrapOwnership(ctx, sess); err != nil {
+	if err := bootstrapOwnership(ctx, rt, sess); err != nil {
 		sess.Cleanup(ctx)
 		return nil, fmt.Errorf("bootstrapping ownership: %w", err)
 	}
 
 	// Create strict network if requested
 	if cfg.StrictNetwork {
-		netID, err := m.rt.NetworkCreate(ctx, "abox-strict-"+id, true)
+		netID, err := rt.NetworkCreate(ctx, "abox-strict-"+id, true)
 		if err != nil {
 			sess.Cleanup(ctx)
 			return nil, fmt.Errorf("creating strict network: %w", err)
 		}
-		sess.volumes.NetworkID = netID
+		sess.Vol.NetworkID = netID
 		slog.DebugContext(ctx, "created strict network", "id", netID)
 	}
 
@@ -81,19 +71,18 @@ func (m *Manager) CreateSession(ctx context.Context, profile config.EditorProfil
 
 // bootstrapOwnership runs a short-lived container as root with the sync image
 // to chown all volume mount paths to the host user's UID:GID.
-func (m *Manager) bootstrapOwnership(ctx context.Context, sess *Session) error {
+func bootstrapOwnership(ctx context.Context, rt runtime.ContainerRuntime, sess *Session) error {
 	uid, gid := os.Getuid(), os.Getgid()
 
-	// Build bind mounts for all volumes
 	type volMount struct {
 		name   string
 		target string
 	}
 	mounts := []volMount{
-		{sess.ConfigVol(), "/vol/config"},
-		{sess.CacheVol(), "/vol/cache"},
-		{sess.StateVol(), "/vol/state"},
-		{sess.ShareVol(), "/vol/share"},
+		{sess.Vol.ConfigVol, "/vol/config"},
+		{sess.Vol.CacheVol, "/vol/cache"},
+		{sess.Vol.StateVol, "/vol/state"},
+		{sess.Vol.ShareVol, "/vol/share"},
 	}
 
 	var chownTargets []string
@@ -102,8 +91,8 @@ func (m *Manager) bootstrapOwnership(ctx context.Context, sess *Session) error {
 		bindMounts = append(bindMounts, m.name+":"+m.target)
 		chownTargets = append(chownTargets, m.target)
 	}
-	if sess.WorkspaceVol() != "" {
-		bindMounts = append(bindMounts, sess.WorkspaceVol()+":/vol/workspace")
+	if sess.Vol.WorkspaceVol != "" {
+		bindMounts = append(bindMounts, sess.Vol.WorkspaceVol+":/vol/workspace")
 		chownTargets = append(chownTargets, "/vol/workspace")
 	}
 
@@ -123,22 +112,22 @@ func (m *Manager) bootstrapOwnership(ctx context.Context, sess *Session) error {
 		CapAdd:     []string{"CHOWN"},
 	}
 
-	return m.runEphemeral(ctx, spec, "bootstrap")
+	return runEphemeral(ctx, rt, spec, "bootstrap")
 }
 
 // runEphemeral creates, starts, waits, and removes a container.
-func (m *Manager) runEphemeral(ctx context.Context, spec runtime.ContainerSpec, purpose string) error {
-	id, err := m.rt.ContainerCreate(ctx, spec)
+func runEphemeral(ctx context.Context, rt runtime.ContainerRuntime, spec runtime.ContainerSpec, purpose string) error {
+	id, err := rt.ContainerCreate(ctx, spec)
 	if err != nil {
 		return fmt.Errorf("%s create: %w", purpose, err)
 	}
-	defer func() { _ = m.rt.ContainerRemove(context.Background(), id, true) }()
+	defer func() { _ = rt.ContainerRemove(context.Background(), id, true) }()
 
-	if err := m.rt.ContainerStart(ctx, id); err != nil {
+	if err := rt.ContainerStart(ctx, id); err != nil {
 		return fmt.Errorf("%s start: %w", purpose, err)
 	}
 
-	code, err := m.rt.ContainerWait(ctx, id)
+	code, err := rt.ContainerWait(ctx, id)
 	if err != nil {
 		return fmt.Errorf("%s wait: %w", purpose, err)
 	}
@@ -150,22 +139,22 @@ func (m *Manager) runEphemeral(ctx context.Context, spec runtime.ContainerSpec, 
 
 // Run creates, starts, and waits for a container to complete.
 // Returns the container's exit code. Cleans up the container on any error.
-func (m *Manager) Run(ctx context.Context, spec Spec) (int, error) {
-	id, err := m.rt.ContainerCreate(ctx, runtime.ContainerSpec(spec))
+func Run(ctx context.Context, rt runtime.ContainerRuntime, spec runtime.ContainerSpec) (int, error) {
+	id, err := rt.ContainerCreate(ctx, spec)
 	if err != nil {
 		return -1, fmt.Errorf("creating container: %w", err)
 	}
 
 	// Ensure cleanup on any failure path
 	defer func() {
-		_ = m.rt.ContainerRemove(context.Background(), id, true)
+		_ = rt.ContainerRemove(context.Background(), id, true)
 	}()
 
-	if err := m.rt.ContainerStart(ctx, id); err != nil {
+	if err := rt.ContainerStart(ctx, id); err != nil {
 		return -1, fmt.Errorf("starting container: %w", err)
 	}
 
-	code, err := m.rt.ContainerWait(ctx, id)
+	code, err := rt.ContainerWait(ctx, id)
 	if err != nil {
 		return -1, fmt.Errorf("waiting for container: %w", err)
 	}

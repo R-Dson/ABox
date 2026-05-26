@@ -7,8 +7,8 @@ func ResolveNetworkMode(sess *Session, cfg *config.Config) string {
 	if cfg.NoInternet {
 		return "none"
 	}
-	if sess.NetworkID() != "" {
-		return sess.NetworkID()
+	if sess.Vol.NetworkID != "" {
+		return sess.Vol.NetworkID
 	}
 	return "" // default bridge
 }

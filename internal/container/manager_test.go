@@ -9,7 +9,7 @@ import (
 	"github.com/r-dson/abox/internal/runtime"
 )
 
-func TestManager_RunCreatesAndStartsContainer(t *testing.T) {
+func TestRun_CreatesAndStartsContainer(t *testing.T) {
 	created := false
 	started := false
 	waited := false
@@ -37,12 +37,11 @@ func TestManager_RunCreatesAndStartsContainer(t *testing.T) {
 	profile, _ := registry.Get("claude")
 	cfg := &config.Config{Editor: "claude"}
 
-	mgr := container.NewManager(stub)
-	sess, _ := mgr.CreateSession(t.Context(), profile, cfg, false)
+	sess, _ := container.CreateSession(t.Context(), stub, profile, cfg, false)
 	defer sess.Cleanup(t.Context())
 
 	spec := container.BuildSpec(profile, sess, "/workspace", cfg)
-	exitCode, err := mgr.Run(t.Context(), spec)
+	exitCode, err := container.Run(t.Context(), stub, spec)
 	if err != nil {
 		t.Fatalf("Run() error: %v", err)
 	}
@@ -61,7 +60,7 @@ func TestManager_RunCreatesAndStartsContainer(t *testing.T) {
 	}
 }
 
-func TestManager_RunPropagatesExitCode(t *testing.T) {
+func TestRun_PropagatesExitCode(t *testing.T) {
 	stub := &runtime.StubRuntime{
 		ContainerCreateFn: func(context.Context, runtime.ContainerSpec) (string, error) {
 			return "c-1", nil
@@ -70,15 +69,14 @@ func TestManager_RunPropagatesExitCode(t *testing.T) {
 		ContainerWaitFn:  func(context.Context, string) (int64, error) { return 42, nil },
 	}
 
-	mgr := container.NewManager(stub)
 	spec := container.BuildSpec(
 		config.EditorProfile{ImageTag: "test", CmdName: "sh"},
-		container.NewSession("t", stub, container.SessionVolumes{}),
+		container.NewSession("t", stub, container.Volumes{}),
 		"/workspace",
 		&config.Config{},
 	)
 
-	exitCode, _ := mgr.Run(t.Context(), spec)
+	exitCode, _ := container.Run(t.Context(), stub, spec)
 	if exitCode != 42 {
 		t.Errorf("exitCode = %d, want 42", exitCode)
 	}

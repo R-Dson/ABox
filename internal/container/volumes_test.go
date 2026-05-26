@@ -28,8 +28,7 @@ func TestNewSession_CreatesAllVolumes(t *testing.T) {
 	profile, _ := registry.Get("claude")
 	cfg := &config.Config{Editor: "claude"}
 
-	mgr := container.NewManager(stub)
-	sess, err := mgr.CreateSession(t.Context(), profile, cfg, false)
+	sess, err := container.CreateSession(t.Context(), stub, profile, cfg, false)
 	if err != nil {
 		t.Fatalf("CreateSession() error: %v", err)
 	}
@@ -49,7 +48,7 @@ func TestNewSession_CreatesAllVolumes(t *testing.T) {
 		}
 	}
 
-	if sess.ID() == "" {
+	if sess.ID == "" {
 		t.Error("session ID should not be empty")
 	}
 }
@@ -74,8 +73,7 @@ func TestNewSession_CleanupOnError(t *testing.T) {
 	profile, _ := registry.Get("claude")
 	cfg := &config.Config{Editor: "claude"}
 
-	mgr := container.NewManager(stub)
-	_, err := mgr.CreateSession(t.Context(), profile, cfg, false)
+	_, err := container.CreateSession(t.Context(), stub, profile, cfg, false)
 	if err == nil {
 		t.Fatal("expected error when volume creation fails")
 	}

@@ -45,7 +45,7 @@ func TestBuildMatcher_LoadsLocalIgnore_UserPatterns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, err := exclusion.BuildMatcher(t.Context(), dir, "")
+	m, err := exclusion.BuildMatcher(t.Context(), dir)
 	if err != nil {
 		t.Fatalf("BuildMatcher() error: %v", err)
 	}

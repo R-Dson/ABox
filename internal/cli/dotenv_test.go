@@ -10,39 +10,55 @@ import (
 
 func TestLoadDotEnv(t *testing.T) {
 	tests := []struct {
-		name    string
-		content string
-		want    []string
+		name     string
+		content  string
+		envSetup map[string]string
+		want     []string
 	}{
 		{
-			name:    "bare keys",
-			content: "API_KEY\nMY_VAR\n",
-			want:    []string{"API_KEY", "MY_VAR"},
+			name:     "bare keys resolved from env",
+			content:  "API_KEY\nMY_VAR\n",
+			envSetup: map[string]string{"API_KEY": "sk-123", "MY_VAR": "hello"},
+			want:     []string{"API_KEY=sk-123", "MY_VAR=hello"},
 		},
 		{
-			name:    "key=value pairs",
-			content: "API_KEY=sk-123\nMY_VAR=hello\n",
-			want:    []string{"API_KEY", "MY_VAR"},
+			name:     "key=value pairs resolve key from env",
+			content:  "API_KEY=sk-123\nMY_VAR=hello\n",
+			envSetup: map[string]string{"API_KEY": "sk-123", "MY_VAR": "hello"},
+			want:     []string{"API_KEY=sk-123", "MY_VAR=hello"},
 		},
 		{
-			name:    "mixed formats",
-			content: "API_KEY\nMY_VAR=hello\n",
-			want:    []string{"API_KEY", "MY_VAR"},
+			name:     "missing env vars skipped",
+			content:  "PRESENT_KEY\nMISSING_KEY\n",
+			envSetup: map[string]string{"PRESENT_KEY": "val"},
+			want:     []string{"PRESENT_KEY=val"},
 		},
 		{
-			name:    "comments and blanks skipped",
-			content: "# comment\n\nAPI_KEY\n# another\n",
-			want:    []string{"API_KEY"},
+			name:     "comments and blanks skipped",
+			content:  "# comment\n\nAPI_KEY\n# another\n",
+			envSetup: map[string]string{"API_KEY": "x"},
+			want:     []string{"API_KEY=x"},
 		},
 		{
 			name:    "empty file",
 			content: "",
 			want:    nil,
 		},
+		{
+			name:     "blocked keys skipped",
+			content:  "PATH\nHOME\nAPI_KEY\n",
+			envSetup: map[string]string{"API_KEY": "x"},
+			want:     []string{"API_KEY=x"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Set up env vars
+			for k, v := range tt.envSetup {
+				t.Setenv(k, v)
+			}
+
 			dir := t.TempDir()
 			if tt.content != "" {
 				if err := os.WriteFile(filepath.Join(dir, ".abxenv"), []byte(tt.content), 0o644); err != nil {

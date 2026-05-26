@@ -11,7 +11,7 @@ import (
 	syncpkg "github.com/r-dson/abox/internal/sync"
 )
 
-func TestSyncer_SyncIn_StreamsTarToContainer(t *testing.T) {
+func TestSyncIn_StreamsTarToContainer(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, dir+"/app.go", []byte("package main"), 0o644)
 
@@ -24,8 +24,7 @@ func TestSyncer_SyncIn_StreamsTarToContainer(t *testing.T) {
 		},
 	}
 
-	s := syncpkg.NewSyncer(stub)
-	err := s.SyncIn(t.Context(), dir, "test-vol", "/data")
+	err := syncpkg.In(t.Context(), stub, dir, "test-vol", "/data", nil)
 	if err != nil {
 		t.Fatalf("SyncIn() error: %v", err)
 	}
@@ -44,7 +43,7 @@ func TestSyncer_SyncIn_StreamsTarToContainer(t *testing.T) {
 	}
 }
 
-func TestSyncer_SyncIn_UsesAtomicRename(t *testing.T) {
+func TestSyncIn_UsesAtomicRename(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, dir+"/file.txt", []byte("data"), 0o644)
 
@@ -56,8 +55,7 @@ func TestSyncer_SyncIn_UsesAtomicRename(t *testing.T) {
 		},
 	}
 
-	s := syncpkg.NewSyncer(stub)
-	err := s.SyncIn(t.Context(), dir, "test-vol", "/workspace")
+	err := syncpkg.In(t.Context(), stub, dir, "test-vol", "/workspace", nil)
 	if err != nil {
 		t.Fatalf("SyncIn() error: %v", err)
 	}
@@ -76,7 +74,7 @@ func TestSyncer_SyncIn_UsesAtomicRename(t *testing.T) {
 	}
 }
 
-func TestSyncer_SyncIn_StreamsToStagingPath(t *testing.T) {
+func TestSyncIn_StreamsToStagingPath(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, dir+"/x.go", []byte("x"), 0o644)
 
@@ -88,8 +86,7 @@ func TestSyncer_SyncIn_StreamsToStagingPath(t *testing.T) {
 		},
 	}
 
-	s := syncpkg.NewSyncer(stub)
-	err := s.SyncIn(t.Context(), dir, "vol", "/project")
+	err := syncpkg.In(t.Context(), stub, dir, "vol", "/project", nil)
 	if err != nil {
 		t.Fatalf("SyncIn() error: %v", err)
 	}

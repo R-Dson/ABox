@@ -13,7 +13,7 @@ import (
 	syncpkg "github.com/r-dson/abox/internal/sync"
 )
 
-func TestSyncer_SyncOut_ExtractsTarToHost(t *testing.T) {
+func TestSyncOut_ExtractsTarToHost(t *testing.T) {
 	destDir := t.TempDir()
 
 	var tarBuf bytes.Buffer
@@ -27,8 +27,7 @@ func TestSyncer_SyncOut_ExtractsTarToHost(t *testing.T) {
 		},
 	}
 
-	s := syncpkg.NewSyncer(stub)
-	err := s.SyncOut(t.Context(), "test-vol", "/workspace", destDir)
+	err := syncpkg.Out(t.Context(), stub, "test-vol", "/workspace", destDir)
 	if err != nil {
 		t.Fatalf("SyncOut() error: %v", err)
 	}
@@ -42,16 +41,14 @@ func TestSyncer_SyncOut_ExtractsTarToHost(t *testing.T) {
 	}
 }
 
-func TestSyncer_SyncOut_SkipsIfDestMissing(t *testing.T) {
-	s := syncpkg.NewSyncer(&runtime.StubRuntime{})
-
-	err := s.SyncOut(t.Context(), "test-vol", "/workspace", "/nonexistent/dest")
+func TestSyncOut_SkipsIfDestMissing(t *testing.T) {
+	err := syncpkg.Out(t.Context(), &runtime.StubRuntime{}, "test-vol", "/workspace", "/nonexistent/dest")
 	if err != nil {
 		t.Fatalf("SyncOut with missing dest should not error: %v", err)
 	}
 }
 
-func TestSyncer_SyncOut_ExtractsNestedFiles(t *testing.T) {
+func TestSyncOut_ExtractsNestedFiles(t *testing.T) {
 	destDir := t.TempDir()
 
 	var tarBuf bytes.Buffer
@@ -66,8 +63,7 @@ func TestSyncer_SyncOut_ExtractsNestedFiles(t *testing.T) {
 		},
 	}
 
-	s := syncpkg.NewSyncer(stub)
-	err := s.SyncOut(t.Context(), "vol", "/workspace", destDir)
+	err := syncpkg.Out(t.Context(), stub, "vol", "/workspace", destDir)
 	if err != nil {
 		t.Fatalf("SyncOut() error: %v", err)
 	}

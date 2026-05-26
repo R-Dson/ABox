@@ -34,12 +34,9 @@ func SeccompProfilePath() string {
 	return seccompPath()
 }
 
-// Spec is the container creation specification.
-type Spec = runtime.ContainerSpec
-
 // BuildSpec creates a ContainerSpec from profile, session, and config.
-func BuildSpec(profile config.EditorProfile, sess *Session, workdir string, cfg *config.Config) Spec {
-	spec := Spec{
+func BuildSpec(profile config.EditorProfile, sess *Session, workdir string, cfg *config.Config) runtime.ContainerSpec {
+	spec := runtime.ContainerSpec{
 		Image:       profile.ImageTag,
 		Cmd:         []string{profile.CmdName},
 		Env:         buildEnv(profile),
@@ -88,14 +85,14 @@ func buildBinds(sess *Session, workdir string) []string {
 	var binds []string
 
 	binds = append(binds,
-		sess.ConfigVol()+":/vol/config",
-		sess.CacheVol()+":/vol/cache",
-		sess.StateVol()+":/vol/state",
-		sess.ShareVol()+":/vol/share",
+		sess.Vol.ConfigVol+":/vol/config",
+		sess.Vol.CacheVol+":/vol/cache",
+		sess.Vol.StateVol+":/vol/state",
+		sess.Vol.ShareVol+":/vol/share",
 	)
 
-	if sess.WorkspaceVol() != "" {
-		binds = append(binds, sess.WorkspaceVol()+":/workspace")
+	if sess.Vol.WorkspaceVol != "" {
+		binds = append(binds, sess.Vol.WorkspaceVol+":/workspace")
 	} else {
 		binds = append(binds, workdir+":/workspace")
 	}

@@ -20,7 +20,7 @@ func NewPodman(ctx context.Context) (ContainerRuntime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating Podman client: %w", err)
 	}
-	if err := pingWithClient(ctx, cli); err != nil {
+	if _, err := cli.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("Podman daemon unreachable: %w", err)
 	}
 	return &dockerRuntime{client: cli}, nil
@@ -31,12 +31,4 @@ func podmanSocket() string {
 		return strings.TrimPrefix(s, "unix://")
 	}
 	return fmt.Sprintf("/run/user/%d/podman/podman.sock", os.Getuid())
-}
-
-func pingWithClient(ctx context.Context, cli *dockerclient.Client) error {
-	_, err := cli.Ping(ctx)
-	if err != nil {
-		return fmt.Errorf("podman ping: %w", err)
-	}
-	return nil
 }

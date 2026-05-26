@@ -12,7 +12,7 @@ func TestBuildSpec_Capabilities(t *testing.T) {
 	registry, _ := config.LoadEditorRegistry()
 	profile, _ := registry.Get("claude")
 
-	sess := container.NewSession("test", nil, container.SessionVolumes{
+	sess := container.NewSession("test", nil, container.Volumes{
 		ConfigVol: "abox-config-test",
 		CacheVol:  "abox-cache-test",
 		StateVol:  "abox-state-test",
@@ -47,7 +47,7 @@ func TestBuildSpec_Capabilities(t *testing.T) {
 func TestBuildSpec_NoDACOverride(t *testing.T) {
 	registry, _ := config.LoadEditorRegistry()
 	profile, _ := registry.Get("claude")
-	sess := container.NewSession("test", nil, container.SessionVolumes{})
+	sess := container.NewSession("test", nil, container.Volumes{})
 
 	spec := container.BuildSpec(profile, sess, "/workspace", &config.Config{})
 
@@ -61,7 +61,7 @@ func TestBuildSpec_NoDACOverride(t *testing.T) {
 func TestBuildSpec_SeccompApplied(t *testing.T) {
 	registry, _ := config.LoadEditorRegistry()
 	profile, _ := registry.Get("claude")
-	sess := container.NewSession("test", nil, container.SessionVolumes{})
+	sess := container.NewSession("test", nil, container.Volumes{})
 
 	spec := container.BuildSpec(profile, sess, "/workspace", &config.Config{})
 
@@ -81,7 +81,7 @@ func TestBuildSpec_SeccompApplied(t *testing.T) {
 func TestBuildSpec_WorkingDir(t *testing.T) {
 	registry, _ := config.LoadEditorRegistry()
 	profile, _ := registry.Get("claude")
-	sess := container.NewSession("test", nil, container.SessionVolumes{})
+	sess := container.NewSession("test", nil, container.Volumes{})
 
 	spec := container.BuildSpec(profile, sess, "/my/workspace", &config.Config{})
 
@@ -93,7 +93,7 @@ func TestBuildSpec_WorkingDir(t *testing.T) {
 func TestBuildSpec_ImageFromProfile(t *testing.T) {
 	registry, _ := config.LoadEditorRegistry()
 	profile, _ := registry.Get("claude")
-	sess := container.NewSession("test", nil, container.SessionVolumes{})
+	sess := container.NewSession("test", nil, container.Volumes{})
 
 	spec := container.BuildSpec(profile, sess, "/workspace", &config.Config{})
 
@@ -105,7 +105,7 @@ func TestBuildSpec_ImageFromProfile(t *testing.T) {
 func TestBuildSpec_NoNewPrivileges(t *testing.T) {
 	registry, _ := config.LoadEditorRegistry()
 	profile, _ := registry.Get("claude")
-	sess := container.NewSession("test", nil, container.SessionVolumes{})
+	sess := container.NewSession("test", nil, container.Volumes{})
 
 	spec := container.BuildSpec(profile, sess, "/workspace", &config.Config{})
 

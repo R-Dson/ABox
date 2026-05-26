@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,24 +39,13 @@ func (m *Matcher) HasPatterns() bool {
 	return len(m.patterns) > 0
 }
 
-// BuildMatcher composes patterns from three sources:
-//  1. Hardcoded security patterns (always applied)
-//  2. Local .abxignore in the workspace
-//  3. Remote URL patterns (fetched over HTTPS)
-func BuildMatcher(ctx context.Context, workdir, remoteURL string) (*Matcher, error) {
+// BuildMatcher composes patterns from hardcoded security patterns
+// and the local .abxignore file in the workspace.
+func BuildMatcher(_ context.Context, workdir string) (*Matcher, error) {
 	patterns := HardcodedPatterns()
 
 	if local, err := loadLocalIgnore(workdir); err == nil {
 		patterns = mergePatterns(patterns, normalizePatterns(local))
-	}
-
-	if remoteURL != "" {
-		if remote, err := fetchRemotePatterns(ctx, remoteURL); err != nil {
-			slog.WarnContext(ctx, "remote patterns unavailable, continuing without",
-				"url", remoteURL, "error", err)
-		} else {
-			patterns = mergePatterns(patterns, remote)
-		}
 	}
 
 	return &Matcher{patterns: patterns}, nil
@@ -84,10 +72,6 @@ func loadLocalIgnore(workdir string) ([]string, error) {
 		return nil, fmt.Errorf("reading ignore file: %w", err)
 	}
 	return patterns, nil
-}
-
-func fetchRemotePatterns(_ context.Context, _ string) ([]string, error) {
-	return nil, fmt.Errorf("remote pattern fetch not implemented")
 }
 
 func mergePatterns(base, additional []string) []string {

@@ -10,14 +10,14 @@ import (
 	syncpkg "github.com/r-dson/abox/internal/sync"
 )
 
-func TestTarDir_SingleFile(t *testing.T) {
+func TestTarFiltered_SingleFile(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, "hello.txt"), []byte("world"), 0o644)
 
 	buf := new(bytes.Buffer)
-	err := syncpkg.TarDir(dir, buf)
+	err := syncpkg.TarFiltered(dir, buf, nil)
 	if err != nil {
-		t.Fatalf("TarDir() error: %v", err)
+		t.Fatalf("TarFiltered() error: %v", err)
 	}
 
 	tr := tar.NewReader(buf)
@@ -42,16 +42,16 @@ func TestTarDir_SingleFile(t *testing.T) {
 	}
 }
 
-func TestTarDir_NestedStructure(t *testing.T) {
+func TestTarFiltered_NestedStructure(t *testing.T) {
 	dir := t.TempDir()
 	mustMkdirAll(t, filepath.Join(dir, "src", "lib"))
 	mustWriteFile(t, filepath.Join(dir, "src", "lib", "util.go"), []byte("package lib"), 0o644)
 	mustWriteFile(t, filepath.Join(dir, "main.go"), []byte("package main"), 0o644)
 
 	buf := new(bytes.Buffer)
-	err := syncpkg.TarDir(dir, buf)
+	err := syncpkg.TarFiltered(dir, buf, nil)
 	if err != nil {
-		t.Fatalf("TarDir() error: %v", err)
+		t.Fatalf("TarFiltered() error: %v", err)
 	}
 
 	tr := tar.NewReader(buf)
@@ -82,13 +82,13 @@ func TestTarDir_NestedStructure(t *testing.T) {
 	}
 }
 
-func TestTarDir_EmptyDir(t *testing.T) {
+func TestTarFiltered_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 
 	buf := new(bytes.Buffer)
-	err := syncpkg.TarDir(dir, buf)
+	err := syncpkg.TarFiltered(dir, buf, nil)
 	if err != nil {
-		t.Fatalf("TarDir() error: %v", err)
+		t.Fatalf("TarFiltered() error: %v", err)
 	}
 
 	tr := tar.NewReader(buf)
@@ -98,14 +98,14 @@ func TestTarDir_EmptyDir(t *testing.T) {
 	}
 }
 
-func TestTarDir_PreservesPermissions(t *testing.T) {
+func TestTarFiltered_PreservesPermissions(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, "script.sh"), []byte("#!/bin/sh"), 0o755)
 
 	buf := new(bytes.Buffer)
-	err := syncpkg.TarDir(dir, buf)
+	err := syncpkg.TarFiltered(dir, buf, nil)
 	if err != nil {
-		t.Fatalf("TarDir() error: %v", err)
+		t.Fatalf("TarFiltered() error: %v", err)
 	}
 
 	tr := tar.NewReader(buf)

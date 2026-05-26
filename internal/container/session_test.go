@@ -18,7 +18,7 @@ func TestSession_CleanupRemovesVolumes(t *testing.T) {
 	}
 
 	sess := container.NewSession("test-123", stub,
-		container.SessionVolumes{
+		container.Volumes{
 			ConfigVol: "abox-config-test-123",
 			CacheVol:  "abox-cache-test-123",
 			StateVol:  "abox-state-test-123",
@@ -64,7 +64,7 @@ func TestSession_CleanupRemovesNetwork(t *testing.T) {
 	}
 
 	sess := container.NewSession("test-456", stub,
-		container.SessionVolumes{NetworkID: "net-abc"},
+		container.Volumes{NetworkID: "net-abc"},
 	)
 
 	sess.Cleanup(context.Background())
@@ -89,7 +89,7 @@ func TestSession_CleanupSkipsEmptyFields(t *testing.T) {
 	}
 
 	sess := container.NewSession("test-789", stub,
-		container.SessionVolumes{
+		container.Volumes{
 			ConfigVol:    "abox-config-test-789",
 			WorkspaceVol: "abox-workspace-test-789",
 		},

@@ -52,7 +52,7 @@ func TestBuildMatcher_LoadsLocalIgnore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, err := exclusion.BuildMatcher(t.Context(), dir, "")
+	m, err := exclusion.BuildMatcher(t.Context(), dir)
 	if err != nil {
 		t.Fatalf("BuildMatcher() error: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestBuildMatcher_IncludesHardcoded(t *testing.T) {
 	dir := t.TempDir()
 	// No .abxignore — should still have hardcoded patterns
 
-	m, err := exclusion.BuildMatcher(t.Context(), dir, "")
+	m, err := exclusion.BuildMatcher(t.Context(), dir)
 	if err != nil {
 		t.Fatalf("BuildMatcher() error: %v", err)
 	}

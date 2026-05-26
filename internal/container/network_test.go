@@ -22,8 +22,7 @@ func TestCreateSession_StrictNetwork(t *testing.T) {
 	profile, _ := registry.Get("claude")
 	cfg := &config.Config{Editor: "claude", StrictNetwork: true}
 
-	mgr := container.NewManager(stub)
-	sess, err := mgr.CreateSession(t.Context(), profile, cfg, false)
+	sess, err := container.CreateSession(t.Context(), stub, profile, cfg, false)
 	if err != nil {
 		t.Fatalf("CreateSession() error: %v", err)
 	}
@@ -32,8 +31,8 @@ func TestCreateSession_StrictNetwork(t *testing.T) {
 	if !createdInternal {
 		t.Error("NetworkCreate was not called with internal=true")
 	}
-	if sess.NetworkID() != "net-strict-123" {
-		t.Errorf("NetworkID = %q, want net-strict-123", sess.NetworkID())
+	if sess.Vol.NetworkID != "net-strict-123" {
+		t.Errorf("NetworkID = %q, want net-strict-123", sess.Vol.NetworkID)
 	}
 }
 
@@ -50,8 +49,7 @@ func TestCreateSession_NoNetworkByDefault(t *testing.T) {
 	profile, _ := registry.Get("claude")
 	cfg := &config.Config{Editor: "claude"}
 
-	mgr := container.NewManager(stub)
-	sess, err := mgr.CreateSession(t.Context(), profile, cfg, false)
+	sess, err := container.CreateSession(t.Context(), stub, profile, cfg, false)
 	if err != nil {
 		t.Fatalf("CreateSession() error: %v", err)
 	}
@@ -60,8 +58,8 @@ func TestCreateSession_NoNetworkByDefault(t *testing.T) {
 	if networkCreated {
 		t.Error("network should not be created when StrictNetwork=false")
 	}
-	if sess.NetworkID() != "" {
-		t.Errorf("NetworkID = %q, want empty", sess.NetworkID())
+	if sess.Vol.NetworkID != "" {
+		t.Errorf("NetworkID = %q, want empty", sess.Vol.NetworkID)
 	}
 }
 
@@ -75,19 +73,19 @@ func TestResolveNetworkMode(t *testing.T) {
 		{
 			name: "no internet returns none",
 			cfg:  config.Config{NoInternet: true},
-			sess: container.NewSession("t", nil, container.SessionVolumes{}),
+			sess: container.NewSession("t", nil, container.Volumes{}),
 			want: "none",
 		},
 		{
 			name: "strict network returns network id",
 			cfg:  config.Config{StrictNetwork: true},
-			sess: container.NewSession("t", nil, container.SessionVolumes{NetworkID: "net-abc"}),
+			sess: container.NewSession("t", nil, container.Volumes{NetworkID: "net-abc"}),
 			want: "net-abc",
 		},
 		{
 			name: "default returns empty (bridge)",
 			cfg:  config.Config{},
-			sess: container.NewSession("t", nil, container.SessionVolumes{}),
+			sess: container.NewSession("t", nil, container.Volumes{}),
 			want: "",
 		},
 	}
