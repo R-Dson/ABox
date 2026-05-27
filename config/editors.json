@@ -21,7 +21,7 @@
       "cmd_name": "copilot"
     },
     "vibe": {
-      "version": "2.11.1",
+      "version": "2.12.1",
       "install_cmd": "uv tool install mistral-vibe@{version}",
       "cmd_name": "vibe"
     },
@@ -36,7 +36,7 @@
       "cmd_name": "codex"
     },
     "gemini": {
-      "version": "0.43.0",
+      "version": "0.44.0",
       "install_cmd": "npm install -g @google/gemini-cli@{version}",
       "cmd_name": "gemini"
     },
