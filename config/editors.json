@@ -31,7 +31,7 @@
       "cmd_name": "goose"
     },
     "codex": {
-      "version": "0.136.0",
+      "version": "0.137.0",
       "install_cmd": "npm i -g @openai/codex@{version}",
       "cmd_name": "codex"
     },
