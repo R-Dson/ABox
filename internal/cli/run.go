@@ -120,6 +120,11 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		return fmt.Errorf("resolving editor: %w", err)
 	}
 
+	home := config.HomeDir()
+	if err := ensureEditorDataDirs(profile, home); err != nil {
+		return fmt.Errorf("preparing editor data directories: %w", err)
+	}
+
 	matcher, err := exclusion.BuildMatcherWithRemote(ctx, workdir, cfg.ExcludeURL)
 	if err != nil {
 		return fmt.Errorf("building exclusion matcher: %w", err)
@@ -142,7 +147,6 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		return fmt.Errorf("materializing seccomp profile: %w", err)
 	}
 
-	home := config.HomeDir()
 	hasWorkspaceVol := matcher.HasPatterns()
 	snapshotDirs := []string{
 		profile.ConfigFullPath(home),
@@ -304,6 +308,24 @@ func ensureRequiredImages(ctx context.Context, rt runtime.ContainerRuntime, edit
 	for _, image := range []string{runtime.SyncImage, editorImage} {
 		if err := ensureImage(ctx, rt, image, pullPolicy); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func ensureEditorDataDirs(profile config.EditorProfile, home string) error {
+	dirs := []string{
+		profile.CachePath(home),
+		profile.StatePath(home),
+		profile.SharePath(home),
+	}
+	if !profile.ConfigIsFile {
+		dirs = append(dirs, profile.ConfigFullPath(home))
+	}
+
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return fmt.Errorf("creating %s: %w", dir, err)
 		}
 	}
 	return nil

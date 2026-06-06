@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -104,6 +105,9 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec)
 			Source: src,
 			Target: dst,
 		}
+		if mountType == dockermount.TypeVolume {
+			mount.VolumeOptions = &dockermount.VolumeOptions{NoCopy: true}
+		}
 		for _, opt := range opts {
 			if opt == "ro" {
 				mount.ReadOnly = true
@@ -114,11 +118,16 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec)
 		mounts = append(mounts, mount)
 	}
 
+	securityOpt, err := normalizeSecurityOpt(spec.SecurityOpt)
+	if err != nil {
+		return "", err
+	}
+
 	hostConfig := &dockercontainer.HostConfig{
 		Mounts:      mounts,
 		CapDrop:     spec.CapDrop,
 		CapAdd:      spec.CapAdd,
-		SecurityOpt: spec.SecurityOpt,
+		SecurityOpt: securityOpt,
 		AutoRemove:  spec.AutoRemove,
 	}
 
@@ -138,6 +147,24 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec)
 		return "", fmt.Errorf("creating container %s: %w", spec.Name, err)
 	}
 	return resp.ID, nil
+}
+
+func normalizeSecurityOpt(opts []string) ([]string, error) {
+	normalized := make([]string, 0, len(opts))
+	for _, opt := range opts {
+		profile, ok := strings.CutPrefix(opt, "seccomp=")
+		if !ok || profile == "unconfined" || strings.HasPrefix(strings.TrimSpace(profile), "{") {
+			normalized = append(normalized, opt)
+			continue
+		}
+
+		data, err := os.ReadFile(profile)
+		if err != nil {
+			return nil, fmt.Errorf("reading seccomp profile %s: %w", profile, err)
+		}
+		normalized = append(normalized, "seccomp="+string(data))
+	}
+	return normalized, nil
 }
 
 func (d *dockerRuntime) ContainerStart(ctx context.Context, id string) error {

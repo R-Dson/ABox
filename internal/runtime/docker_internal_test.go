@@ -2,9 +2,43 @@ package runtime
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestNormalizeSecurityOptInlinesSeccompProfilePath(t *testing.T) {
+	profilePath := filepath.Join(t.TempDir(), "seccomp.json")
+	if err := os.WriteFile(profilePath, []byte(`{"defaultAction":"SCMP_ACT_ALLOW"}`), 0o600); err != nil {
+		t.Fatalf("writing seccomp fixture: %v", err)
+	}
+
+	got, err := normalizeSecurityOpt([]string{"no-new-privileges", "seccomp=" + profilePath})
+	if err != nil {
+		t.Fatalf("normalizeSecurityOpt() error = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("normalizeSecurityOpt() = %v", got)
+	}
+	if !strings.HasPrefix(got[1], "seccomp={") {
+		t.Fatalf("seccomp profile was not inlined: %q", got[1])
+	}
+}
+
+func TestNormalizeSecurityOptLeavesInlineSeccompAndUnconfined(t *testing.T) {
+	opts := []string{"seccomp=unconfined", `seccomp={"defaultAction":"SCMP_ACT_ALLOW"}`}
+	got, err := normalizeSecurityOpt(opts)
+	if err != nil {
+		t.Fatalf("normalizeSecurityOpt() error = %v", err)
+	}
+	for i := range opts {
+		if got[i] != opts[i] {
+			t.Fatalf("normalizeSecurityOpt()[%d] = %q, want %q", i, got[i], opts[i])
+		}
+	}
+}
 
 func TestWaitForExecResultPollsUntilNotRunning(t *testing.T) {
 	calls := 0

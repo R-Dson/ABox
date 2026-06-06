@@ -43,6 +43,29 @@ func TestSyncOut_ExtractsTarToHost(t *testing.T) {
 	}
 }
 
+func TestSyncOut_SkipsInternalVolumeMarker(t *testing.T) {
+	destDir := t.TempDir()
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+	mustTarWrite(t, tw, &tar.Header{Name: ".abx-volume-initialized", Mode: 0o644, Size: 0}, nil)
+	mustTarWrite(t, tw, &tar.Header{Name: "kept.txt", Mode: 0o644, Size: int64(len("kept"))}, []byte("kept"))
+	tw.Close()
+
+	stub := &runtimetest.StubRuntime{
+		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
+			return io.NopCloser(&tarBuf), nil
+		},
+	}
+
+	if err := syncpkg.Out(t.Context(), stub, "test-vol", "/workspace", destDir); err != nil {
+		t.Fatalf("SyncOut() error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(destDir, ".abx-volume-initialized")); !os.IsNotExist(err) {
+		t.Fatalf("internal marker should not sync out, stat error = %v", err)
+	}
+}
+
 func TestSyncOut_CopiesDirectoryContents(t *testing.T) {
 	destDir := t.TempDir()
 	var gotSrc string

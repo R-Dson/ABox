@@ -72,7 +72,7 @@ func TestSyncIn_ReplacesContentsFromStagingDirectory(t *testing.T) {
 	if len(execCmds) != 2 {
 		t.Fatalf("expected 2 exec calls, got %d", len(execCmds))
 	}
-	want := []string{"sh", "-c", fmt.Sprintf("find /workspace -mindepth 1 -maxdepth 1 ! -name .abx-tmp -exec rm -rf {} + && cp -a /workspace/.abx-tmp/. /workspace/ && rm -rf /workspace/.abx-tmp && chown -R %d:%d /workspace", os.Getuid(), os.Getgid())}
+	want := []string{"sh", "-c", fmt.Sprintf("find /workspace -mindepth 1 -maxdepth 1 ! -name .abx-tmp -exec rm -rf {} + && cp -a /workspace/.abx-tmp/. /workspace/ && rm -rf /workspace/.abx-tmp && touch /workspace/.abx-volume-initialized && chown -R %d:%d /workspace", os.Getuid(), os.Getgid())}
 	if len(execCmds[1]) != len(want) {
 		t.Fatalf("exec cmd = %v, want %v", execCmds[1], want)
 	}

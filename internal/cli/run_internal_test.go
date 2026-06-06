@@ -1,8 +1,12 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/r-dson/abox/internal/config"
 )
 
 func TestValidateSessionConfig(t *testing.T) {
@@ -31,6 +35,44 @@ func TestValidateSessionConfig(t *testing.T) {
 				t.Fatalf("validateSessionConfig() error = %v, want containing %q", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestEnsureEditorDataDirsCreatesDirectoryBackedPaths(t *testing.T) {
+	home := t.TempDir()
+	profile := config.EditorProfile{CmdName: "opencode", ConfigPath: ".config/opencode"}
+
+	if err := ensureEditorDataDirs(profile, home); err != nil {
+		t.Fatalf("ensureEditorDataDirs() error = %v", err)
+	}
+
+	for _, dir := range []string{
+		filepath.Join(home, ".config", "opencode"),
+		filepath.Join(home, ".cache", "opencode"),
+		filepath.Join(home, ".local", "state", "opencode"),
+		filepath.Join(home, ".local", "share", "opencode"),
+	} {
+		info, err := os.Stat(dir)
+		if err != nil {
+			t.Fatalf("expected %s to exist: %v", dir, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("expected %s to be a directory", dir)
+		}
+	}
+}
+
+func TestEnsureEditorDataDirsDoesNotCreateFileBackedConfig(t *testing.T) {
+	home := t.TempDir()
+	profile := config.EditorProfile{CmdName: "aider", ConfigPath: ".aider.conf.yml", ConfigIsFile: true}
+
+	if err := ensureEditorDataDirs(profile, home); err != nil {
+		t.Fatalf("ensureEditorDataDirs() error = %v", err)
+	}
+
+	configPath := filepath.Join(home, ".aider.conf.yml")
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("file-backed config path should not be created, stat error = %v", err)
 	}
 }
 

@@ -15,13 +15,15 @@ import (
 	"github.com/r-dson/abox/internal/runtime"
 )
 
+const volumeInitializedMarker = ".abx-volume-initialized"
+
 // SyncIn transfers files from a host directory to a container volume.
 // If matcher is non-nil, files matching the exclusion patterns are skipped.
-// Skips if the source directory doesn't exist.
+// Missing sources initialize an empty writable volume.
 func In(ctx context.Context, rt runtime.ContainerRuntime, srcDir, volumeName, dstPath string, matcher *exclusion.Matcher) error {
 	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
-		slog.DebugContext(ctx, "sync source does not exist, skipping", "path", srcDir)
-		return nil
+		slog.DebugContext(ctx, "sync source does not exist, initializing empty volume", "path", srcDir)
+		return initializeEmptyVolume(ctx, rt, volumeName, dstPath)
 	}
 
 	containerID, cleanup, err := mountVolumeContainer(ctx, rt, volumeName)
@@ -31,9 +33,10 @@ func In(ctx context.Context, rt runtime.ContainerRuntime, srcDir, volumeName, ds
 	defer cleanup()
 
 	stagingPath := path.Join(dstPath, ".abx-tmp")
-	if _, err := rt.ContainerExec(ctx, containerID,
-		[]string{"sh", "-c", "rm -rf " + stagingPath + " && mkdir -p " + stagingPath}); err != nil {
-		return fmt.Errorf("preparing staging path in volume: %w", err)
+	if err := execSuccessful(ctx, rt, containerID,
+		[]string{"sh", "-c", "rm -rf " + stagingPath + " && mkdir -p " + stagingPath},
+		"preparing staging path in volume"); err != nil {
+		return err
 	}
 
 	// Stream tar via pipe; CloseWithError propagates tar errors to the reader side.
@@ -50,11 +53,33 @@ func In(ctx context.Context, rt runtime.ContainerRuntime, srcDir, volumeName, ds
 		return fmt.Errorf("streaming %s to volume: %w", srcDir, err)
 	}
 
-	replaceCmd := fmt.Sprintf("find %[1]s -mindepth 1 -maxdepth 1 ! -name .abx-tmp -exec rm -rf {} + && cp -a %[2]s/. %[1]s/ && rm -rf %[2]s && chown -R %[3]d:%[4]d %[1]s", dstPath, stagingPath, os.Getuid(), os.Getgid())
-	if _, err := rt.ContainerExec(ctx, containerID, []string{"sh", "-c", replaceCmd}); err != nil {
-		return fmt.Errorf("replacing volume contents: %w", err)
+	replaceCmd := fmt.Sprintf("find %[1]s -mindepth 1 -maxdepth 1 ! -name .abx-tmp -exec rm -rf {} + && cp -a %[2]s/. %[1]s/ && rm -rf %[2]s && touch %[1]s/%[5]s && chown -R %[3]d:%[4]d %[1]s", dstPath, stagingPath, os.Getuid(), os.Getgid(), volumeInitializedMarker)
+	if err := execSuccessful(ctx, rt, containerID, []string{"sh", "-c", replaceCmd}, "replacing volume contents"); err != nil {
+		return err
 	}
 
+	return nil
+}
+
+func initializeEmptyVolume(ctx context.Context, rt runtime.ContainerRuntime, volumeName, dstPath string) error {
+	containerID, cleanup, err := mountVolumeContainer(ctx, rt, volumeName)
+	if err != nil {
+		return fmt.Errorf("mounting volume %s: %w", volumeName, err)
+	}
+	defer cleanup()
+
+	cmd := fmt.Sprintf("mkdir -p %[1]s && touch %[1]s/%[4]s && chown -R %[2]d:%[3]d %[1]s", dstPath, os.Getuid(), os.Getgid(), volumeInitializedMarker)
+	return execSuccessful(ctx, rt, containerID, []string{"sh", "-c", cmd}, "initializing empty volume")
+}
+
+func execSuccessful(ctx context.Context, rt runtime.ContainerRuntime, containerID string, cmd []string, purpose string) error {
+	code, err := rt.ContainerExec(ctx, containerID, cmd)
+	if err != nil {
+		return fmt.Errorf("%s: %w", purpose, err)
+	}
+	if code != 0 {
+		return fmt.Errorf("%s exited with code %d", purpose, code)
+	}
 	return nil
 }
 
@@ -132,7 +157,7 @@ func mountVolumeContainer(ctx context.Context, rt runtime.ContainerRuntime, volu
 		AutoRemove: false,
 		Binds:      []string{volumeName + ":/data"},
 		CapDrop:    []string{"ALL"},
-		CapAdd:     []string{"CHOWN"},
+		CapAdd:     []string{"CHOWN", "DAC_OVERRIDE"},
 	}
 
 	id, err := rt.ContainerCreate(ctx, spec)
@@ -186,6 +211,10 @@ func TarFiltered(dir string, w io.Writer, matcher *exclusion.Matcher) error {
 
 		// Skip the root directory itself
 		if rel == "." {
+			return nil
+		}
+
+		if rel == volumeInitializedMarker {
 			return nil
 		}
 
@@ -301,6 +330,10 @@ func extractTar(r io.Reader, dest string) error {
 		}
 		if err != nil {
 			return fmt.Errorf("reading tar: %w", err)
+		}
+
+		if filepath.Clean(header.Name) == volumeInitializedMarker {
+			continue
 		}
 
 		target := filepath.Join(dest, header.Name)
