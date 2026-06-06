@@ -39,7 +39,9 @@ func NewRootCmd(version string) *cobra.Command {
 				jsonLogs, _ = cmd.Flags().GetBool("json-logs")
 			}
 
-			logging.Setup(verbose, jsonLogs)
+			if err := logging.Setup(verbose, jsonLogs); err != nil {
+				return fmt.Errorf("setting up logging: %w", err)
+			}
 			return nil
 		},
 	}
@@ -151,7 +153,7 @@ func applyLoadedConfig(cmd *cobra.Command, cfg *SessionConfig, loadedConfig *con
 	}
 	cfg.PullPolicy = loadedConfig.PullPolicy
 	if cfg.Offline || cfg.NoInternet {
-		cfg.PullPolicy = "never"
+		cfg.PullPolicy = pullPolicyNever
 	}
 	cfg.MemoryLimit = loadedConfig.MemoryLimit
 	cfg.CPULimit = loadedConfig.CPULimit

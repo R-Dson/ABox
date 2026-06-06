@@ -12,6 +12,7 @@ import (
 
 	"github.com/r-dson/abox/internal/cli"
 	"github.com/r-dson/abox/internal/runtime"
+	"github.com/r-dson/abox/internal/runtimetest"
 )
 
 func TestRunSession_CreatesAndCleansUp(t *testing.T) {
@@ -235,7 +236,7 @@ func TestRunSession_ReturnsSyncOutError(t *testing.T) {
 	}
 }
 
-// --- callRecorder wraps StubRuntime with method call recording ---
+// --- callRecorder wraps the runtime test stub with method call recording ---
 
 type callRecorder struct {
 	mu          sync.Mutex
@@ -245,12 +246,12 @@ type callRecorder struct {
 	nextID      int
 	waitCount   int
 	imageExists bool
-	s           runtime.StubRuntime
+	s           runtimetest.StubRuntime
 }
 
 func newCallRecorder() *callRecorder {
 	r := &callRecorder{}
-	r.s = runtime.StubRuntime{
+	r.s = runtimetest.StubRuntime{
 		VolumeCreateFn: func(_ context.Context, _ string, _ map[string]string) error {
 			r.add("VolumeCreate")
 			return r.shouldFail("VolumeCreate")

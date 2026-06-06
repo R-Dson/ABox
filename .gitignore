@@ -1,10 +1,17 @@
 # Build artifacts
-build/
-bin/*
+/build/
+/bin/*
 *.x.c
-abx
+/abx
+/test_new
+/test_wg
+*.test
 coverage.out
 dist/
+
+# Local env files
+.env
+.abxenv
 
 # Editor-specific
 .vscode/

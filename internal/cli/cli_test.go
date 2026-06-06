@@ -20,6 +20,7 @@ func TestRootCmd_HasRunFlags(t *testing.T) {
 		{"strict-network"},
 		{"no-internet"},
 		{"force-sync"},
+		{"ssh-agent"},
 		{"exclude-url"},
 	}
 

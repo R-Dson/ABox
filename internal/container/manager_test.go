@@ -9,6 +9,7 @@ import (
 	"github.com/r-dson/abox/internal/config"
 	"github.com/r-dson/abox/internal/container"
 	"github.com/r-dson/abox/internal/runtime"
+	"github.com/r-dson/abox/internal/runtimetest"
 )
 
 func TestRun_CreatesAndStartsContainer(t *testing.T) {
@@ -17,7 +18,7 @@ func TestRun_CreatesAndStartsContainer(t *testing.T) {
 	attached := false
 	waited := false
 
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		VolumeCreateFn: func(context.Context, string, map[string]string) error { return nil },
 		ContainerCreateFn: func(_ context.Context, _ runtime.ContainerSpec) (string, error) {
 			created = true
@@ -90,7 +91,7 @@ func (testReadWriteCloser) Close() error {
 }
 
 func TestRun_PropagatesExitCode(t *testing.T) {
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		ContainerCreateFn: func(context.Context, runtime.ContainerSpec) (string, error) {
 			return "c-1", nil
 		},

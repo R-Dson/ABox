@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -12,16 +11,17 @@ func newCompletionCmd(root *cobra.Command) *cobra.Command {
 		Use:   "completion [bash|zsh|fish|powershell]",
 		Short: "Generate shell completion script",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
 			switch args[0] {
 			case "bash":
-				return root.GenBashCompletion(os.Stdout)
+				return root.GenBashCompletion(out)
 			case "zsh":
-				return root.GenZshCompletion(os.Stdout)
+				return root.GenZshCompletion(out)
 			case "fish":
-				return root.GenFishCompletion(os.Stdout, true)
+				return root.GenFishCompletion(out, true)
 			case "powershell":
-				return root.GenPowerShellCompletionWithDesc(os.Stdout)
+				return root.GenPowerShellCompletionWithDesc(out)
 			default:
 				return fmt.Errorf("unsupported shell: %s", args[0])
 			}

@@ -38,6 +38,12 @@ type SessionConfig struct {
 	EditorArgs      []string
 }
 
+const (
+	pullPolicyAlways  = "always"
+	pullPolicyMissing = "missing"
+	pullPolicyNever   = "never"
+)
+
 // ExitError wraps an exit code from the container process.
 type ExitError struct {
 	Code int
@@ -99,7 +105,6 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		return err
 	}
 
-	// 1. Load editor registry and resolve editor
 	registry, err := config.LoadEditorRegistry()
 	if err != nil {
 		return fmt.Errorf("loading editor registry: %w", err)
@@ -115,7 +120,6 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		return fmt.Errorf("resolving editor: %w", err)
 	}
 
-	// 2. Build exclusion matcher
 	matcher, err := exclusion.BuildMatcherWithRemote(ctx, workdir, cfg.ExcludeURL)
 	if err != nil {
 		return fmt.Errorf("building exclusion matcher: %w", err)
@@ -154,7 +158,6 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		return fmt.Errorf("snapshotting mtimes: %w", err)
 	}
 
-	// 3. Create container session (volumes, optional strict network)
 	sess, err := container.CreateSession(ctx, rt, profile, resolvedConfig, hasWorkspaceVol)
 	if err != nil {
 		return fmt.Errorf("creating session: %w", err)
@@ -167,8 +170,6 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		sess.Vol.StateVol:  profile.StatePath(home),
 		sess.Vol.ShareVol:  profile.SharePath(home),
 	}
-
-	// 4. SyncIn: host → container volumes (parallel, bounded concurrency)
 
 	g, gctx := errgroup.WithContext(ctx)
 	for vol, srcDir := range syncDirs {
@@ -196,7 +197,6 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		return fmt.Errorf("parallel sync-in: %w", err)
 	}
 
-	// 6. Build spec and run the editor container
 	spec, err := container.BuildSpec(profile, sess, workdir, resolvedConfig)
 	if err != nil {
 		return fmt.Errorf("building container spec: %w", err)
@@ -218,7 +218,6 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		return fmt.Errorf("running container: %w", err)
 	}
 
-	// 7. Check for mtime conflicts
 	if snap != nil {
 		conflicts := snap.DetectConflicts()
 		if len(conflicts) > 0 && !cfg.ForceSync {
@@ -230,7 +229,6 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		}
 	}
 
-	// 8. SyncOut: container → host (parallel, bounded concurrency)
 	if sess.Vol.WorkspaceVol != "" {
 		syncDirs[sess.Vol.WorkspaceVol] = workdir
 	}
@@ -286,9 +284,9 @@ func validateSessionConfig(cfg *SessionConfig) error {
 	}
 	pullPolicy := cfg.PullPolicy
 	if pullPolicy == "" {
-		pullPolicy = "never"
+		pullPolicy = pullPolicyNever
 	}
-	if pullPolicy != "never" && pullPolicy != "always" && pullPolicy != "missing" {
+	if pullPolicy != pullPolicyNever && pullPolicy != pullPolicyAlways && pullPolicy != pullPolicyMissing {
 		return fmt.Errorf("unsupported pull policy %q: use always, missing, or never", pullPolicy)
 	}
 	return nil
@@ -297,10 +295,10 @@ func validateSessionConfig(cfg *SessionConfig) error {
 func ensureRequiredImages(ctx context.Context, rt runtime.ContainerRuntime, editorImage string, cfg *SessionConfig) error {
 	pullPolicy := cfg.PullPolicy
 	if pullPolicy == "" {
-		pullPolicy = "never"
+		pullPolicy = pullPolicyNever
 	}
 	if cfg.Offline || cfg.NoInternet {
-		pullPolicy = "never"
+		pullPolicy = pullPolicyNever
 	}
 
 	for _, image := range []string{runtime.SyncImage, editorImage} {
@@ -313,14 +311,14 @@ func ensureRequiredImages(ctx context.Context, rt runtime.ContainerRuntime, edit
 
 func ensureImage(ctx context.Context, rt runtime.ContainerRuntime, image, pullPolicy string) error {
 	switch pullPolicy {
-	case "never":
+	case pullPolicyNever:
 		return nil
-	case "always":
+	case pullPolicyAlways:
 		if err := rt.ImagePull(ctx, image, io.Discard); err != nil {
 			return fmt.Errorf("pulling image %s: %w", image, err)
 		}
 		return nil
-	case "missing":
+	case pullPolicyMissing:
 		exists, err := rt.ImageExists(ctx, image)
 		if err != nil {
 			return fmt.Errorf("checking image %s: %w", image, err)

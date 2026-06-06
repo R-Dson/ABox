@@ -8,14 +8,14 @@ import (
 
 	"github.com/r-dson/abox/internal/config"
 	"github.com/r-dson/abox/internal/container"
-	"github.com/r-dson/abox/internal/runtime"
+	"github.com/r-dson/abox/internal/runtimetest"
 )
 
 func TestNewSession_CreatesAllVolumes(t *testing.T) {
 	createdVolumes := []string{}
 	var mu sync.Mutex
 
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		VolumeCreateFn: func(_ context.Context, name string, _ map[string]string) error {
 			mu.Lock()
 			createdVolumes = append(createdVolumes, name)
@@ -56,7 +56,7 @@ func TestNewSession_CreatesAllVolumes(t *testing.T) {
 func TestNewSession_CleanupOnError(t *testing.T) {
 	var mu sync.Mutex
 	callCount := 0
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		VolumeCreateFn: func(_ context.Context, _ string, _ map[string]string) error {
 			mu.Lock()
 			callCount++

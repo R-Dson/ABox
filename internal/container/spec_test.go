@@ -56,7 +56,7 @@ func TestBuildSpec_NoDACOverride(t *testing.T) {
 
 	for _, cap := range spec.CapAdd {
 		if cap == "DAC_OVERRIDE" {
-			t.Error("DAC_OVERRIDE must not be in CapAdd (review finding C1b)")
+			t.Error("DAC_OVERRIDE must not be in CapAdd")
 		}
 	}
 }

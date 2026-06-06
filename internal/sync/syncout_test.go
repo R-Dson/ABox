@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/r-dson/abox/internal/runtime"
+	"github.com/r-dson/abox/internal/runtimetest"
 	syncpkg "github.com/r-dson/abox/internal/sync"
 )
 
@@ -23,7 +23,7 @@ func TestSyncOut_ExtractsTarToHost(t *testing.T) {
 	mustTarWrite(t, tw, &tar.Header{Name: "modified.go", Mode: 0o644, Size: int64(len("package main"))}, []byte("package main"))
 	tw.Close()
 
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
 			return io.NopCloser(&tarBuf), nil
 		},
@@ -46,7 +46,7 @@ func TestSyncOut_ExtractsTarToHost(t *testing.T) {
 func TestSyncOut_CopiesDirectoryContents(t *testing.T) {
 	destDir := t.TempDir()
 	var gotSrc string
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyFromContainerFn: func(_ context.Context, _, src string) (io.ReadCloser, error) {
 			gotSrc = src
 			var tarBuf bytes.Buffer
@@ -75,7 +75,7 @@ func TestSyncOut_ExtractsTarToHostFile(t *testing.T) {
 	mustTarWrite(t, tw, &tar.Header{Name: ".aider.conf.yml", Mode: 0o600, Size: int64(len("new"))}, []byte("new"))
 	tw.Close()
 
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
 			return io.NopCloser(&tarBuf), nil
 		},
@@ -103,7 +103,7 @@ func TestSyncOutFile_CreatesMissingHostFile(t *testing.T) {
 	mustTarWrite(t, tw, &tar.Header{Name: ".aider.conf.yml", Mode: 0o600, Size: int64(len("created"))}, []byte("created"))
 	tw.Close()
 
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
 			return io.NopCloser(&tarBuf), nil
 		},
@@ -126,7 +126,7 @@ func TestSyncOutFile_CreatesMissingHostFile(t *testing.T) {
 func TestSyncOutFile_CopiesExpectedFilePath(t *testing.T) {
 	destFile := filepath.Join(t.TempDir(), ".aider.conf.yml")
 	var gotSrc string
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyFromContainerFn: func(_ context.Context, _, src string) (io.ReadCloser, error) {
 			gotSrc = src
 			var tarBuf bytes.Buffer
@@ -156,7 +156,7 @@ func TestSyncOutFile_RejectsUnexpectedArchiveEntry(t *testing.T) {
 	mustTarWrite(t, tw, &tar.Header{Name: "wrong.conf", Mode: 0o600, Size: int64(len("wrong"))}, []byte("wrong"))
 	tw.Close()
 
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
 			return io.NopCloser(&tarBuf), nil
 		},
@@ -181,7 +181,7 @@ func TestSyncOutFile_ErrorsWhenArchiveHasNoFile(t *testing.T) {
 	tw := tar.NewWriter(&tarBuf)
 	tw.Close()
 
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
 			return io.NopCloser(&tarBuf), nil
 		},
@@ -195,7 +195,7 @@ func TestSyncOutFile_ErrorsWhenArchiveHasNoFile(t *testing.T) {
 
 func TestSyncOutFile_DoesNotCreateFileOnCopyFailure(t *testing.T) {
 	destFile := filepath.Join(t.TempDir(), ".aider.conf.yml")
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
 			return nil, errors.New("copy failed")
 		},
@@ -223,7 +223,7 @@ func TestSyncOutFile_RejectsHostSymlinkOverwrite(t *testing.T) {
 	mustTarWrite(t, tw, &tar.Header{Name: ".aider.conf.yml", Mode: 0o600, Size: int64(len("changed"))}, []byte("changed"))
 	tw.Close()
 
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
 			return io.NopCloser(&tarBuf), nil
 		},
@@ -243,7 +243,7 @@ func TestSyncOutFile_RejectsHostSymlinkOverwrite(t *testing.T) {
 }
 
 func TestSyncOut_SkipsIfDestMissing(t *testing.T) {
-	err := syncpkg.Out(t.Context(), &runtime.StubRuntime{}, "test-vol", "/workspace", "/nonexistent/dest")
+	err := syncpkg.Out(t.Context(), &runtimetest.StubRuntime{}, "test-vol", "/workspace", "/nonexistent/dest")
 	if err != nil {
 		t.Fatalf("SyncOut with missing dest should not error: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestSyncOut_RejectsHostSymlinkOverwrite(t *testing.T) {
 	mustTarWrite(t, tw, &tar.Header{Name: "modified.go", Mode: 0o644, Size: int64(len("changed"))}, []byte("changed"))
 	tw.Close()
 
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
 			return io.NopCloser(&tarBuf), nil
 		},
@@ -290,7 +290,7 @@ func TestSyncOut_ExtractsNestedFiles(t *testing.T) {
 	mustTarWrite(t, tw, &tar.Header{Name: "main.rs", Mode: 0o644, Size: 4}, []byte("fn m"))
 	tw.Close()
 
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
 			return io.NopCloser(&tarBuf), nil
 		},

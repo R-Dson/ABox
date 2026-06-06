@@ -1,20 +1,20 @@
-package runtime
+package runtimetest
 
 import (
 	"bytes"
 	"context"
 	"io"
+
+	"github.com/r-dson/abox/internal/runtime"
 )
 
-// StubRuntime is a test helper that satisfies ContainerRuntime with no-op defaults.
-// Embed this struct in test-specific mocks and override only the function fields
-// you need. This avoids duplicating 16 method stubs in every test package.
+// StubRuntime satisfies runtime.ContainerRuntime with no-op defaults for tests.
 type StubRuntime struct {
 	VolumeCreateFn      func(ctx context.Context, name string, labels map[string]string) error
 	VolumeRemoveFn      func(ctx context.Context, name string, force bool) error
 	NetworkCreateFn     func(ctx context.Context, name string, internal bool) (string, error)
 	NetworkRemoveFn     func(ctx context.Context, id string) error
-	ContainerCreateFn   func(ctx context.Context, spec ContainerSpec) (string, error)
+	ContainerCreateFn   func(ctx context.Context, spec runtime.ContainerSpec) (string, error)
 	ContainerStartFn    func(ctx context.Context, id string) error
 	ContainerWaitFn     func(ctx context.Context, id string) (int64, error)
 	ContainerRemoveFn   func(ctx context.Context, id string, force bool) error
@@ -26,7 +26,6 @@ type StubRuntime struct {
 	CopyFromContainerFn func(ctx context.Context, id, srcPath string) (io.ReadCloser, error)
 	ImagePullFn         func(ctx context.Context, ref string, out io.Writer) error
 	ImageExistsFn       func(ctx context.Context, ref string) (bool, error)
-	PingFn              func(ctx context.Context) error
 }
 
 func (s *StubRuntime) VolumeCreate(ctx context.Context, name string, labels map[string]string) error {
@@ -57,7 +56,7 @@ func (s *StubRuntime) NetworkRemove(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *StubRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec) (string, error) {
+func (s *StubRuntime) ContainerCreate(ctx context.Context, spec runtime.ContainerSpec) (string, error) {
 	if s.ContainerCreateFn != nil {
 		return s.ContainerCreateFn(ctx, spec)
 	}
@@ -89,7 +88,7 @@ func (s *StubRuntime) ContainerAttach(ctx context.Context, id string) (io.ReadWr
 	if s.ContainerAttachFn != nil {
 		return s.ContainerAttachFn(ctx, id)
 	}
-	return nopRWC{}, nil
+	return nopReadWriteCloser{}, nil
 }
 
 func (s *StubRuntime) ContainerResize(ctx context.Context, id string, height, width uint) error {
@@ -141,15 +140,8 @@ func (s *StubRuntime) ImageExists(ctx context.Context, ref string) (bool, error)
 	return false, nil
 }
 
-func (s *StubRuntime) Ping(ctx context.Context) error {
-	if s.PingFn != nil {
-		return s.PingFn(ctx)
-	}
-	return nil
-}
+type nopReadWriteCloser struct{}
 
-type nopRWC struct{}
-
-func (nopRWC) Read(_ []byte) (int, error)  { return 0, io.EOF }
-func (nopRWC) Write(_ []byte) (int, error) { return 0, nil }
-func (nopRWC) Close() error                { return nil }
+func (nopReadWriteCloser) Read(_ []byte) (int, error)  { return 0, io.EOF }
+func (nopReadWriteCloser) Write(_ []byte) (int, error) { return 0, nil }
+func (nopReadWriteCloser) Close() error                { return nil }

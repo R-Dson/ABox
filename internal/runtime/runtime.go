@@ -72,6 +72,4 @@ type ContainerRuntime interface {
 	// Images
 	ImagePull(ctx context.Context, ref string, out io.Writer) error
 	ImageExists(ctx context.Context, ref string) (bool, error)
-
-	Ping(ctx context.Context) error
 }

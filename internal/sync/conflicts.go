@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/r-dson/abox/internal/config"
 )
 
 // MtimeSnapshot records file modification times for conflict detection.
@@ -45,18 +43,6 @@ func SnapshotMtimes(dirs []string) (*MtimeSnapshot, error) {
 	}
 
 	return snap, nil
-}
-
-// SnapshotMtimesFromProfile creates a snapshot of all editor data directories
-// derived from the EditorProfile (config, cache, state, share).
-func SnapshotMtimesFromProfile(profile config.EditorProfile, home string) (*MtimeSnapshot, error) {
-	dirs := []string{
-		profile.ConfigFullPath(home),
-		profile.CachePath(home),
-		profile.StatePath(home),
-		profile.SharePath(home),
-	}
-	return SnapshotMtimes(dirs)
 }
 
 // DetectConflicts returns paths of files whose mtime changed since the snapshot.

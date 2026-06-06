@@ -14,7 +14,9 @@ func TestSetup_VerboseCreatesLogFile(t *testing.T) {
 	os.Setenv("HOME", tmpHome)
 	defer os.Setenv("HOME", origHome)
 
-	logging.Setup(true, false)
+	if err := logging.Setup(true, false); err != nil {
+		t.Fatalf("Setup() error: %v", err)
+	}
 
 	logFile := filepath.Join(tmpHome, ".local", "state", "abx", "abx.log")
 	info, err := os.Stat(logFile)
@@ -32,7 +34,9 @@ func TestSetup_NonVerboseNoFile(t *testing.T) {
 	os.Setenv("HOME", tmpHome)
 	defer os.Setenv("HOME", origHome)
 
-	logging.Setup(false, false)
+	if err := logging.Setup(false, false); err != nil {
+		t.Fatalf("Setup() error: %v", err)
+	}
 
 	logFile := filepath.Join(tmpHome, ".local", "state", "abx", "abx.log")
 	if _, err := os.Stat(logFile); err == nil {
@@ -46,8 +50,9 @@ func TestSetup_JSONOutput(t *testing.T) {
 	os.Setenv("HOME", tmpHome)
 	defer os.Setenv("HOME", origHome)
 
-	// Should not panic when jsonOutput=true
-	logging.Setup(false, true)
+	if err := logging.Setup(false, true); err != nil {
+		t.Fatalf("Setup() error: %v", err)
+	}
 }
 
 func TestSetup_VerboseAndJSON(t *testing.T) {
@@ -56,7 +61,9 @@ func TestSetup_VerboseAndJSON(t *testing.T) {
 	os.Setenv("HOME", tmpHome)
 	defer os.Setenv("HOME", origHome)
 
-	logging.Setup(true, true)
+	if err := logging.Setup(true, true); err != nil {
+		t.Fatalf("Setup() error: %v", err)
+	}
 
 	logFile := filepath.Join(tmpHome, ".local", "state", "abx", "abx.log")
 	if _, err := os.Stat(logFile); err != nil {

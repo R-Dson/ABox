@@ -6,12 +6,12 @@ import (
 
 	"github.com/r-dson/abox/internal/config"
 	"github.com/r-dson/abox/internal/container"
-	"github.com/r-dson/abox/internal/runtime"
+	"github.com/r-dson/abox/internal/runtimetest"
 )
 
 func TestCreateSession_StrictNetwork(t *testing.T) {
 	var createdInternal bool
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		NetworkCreateFn: func(_ context.Context, _ string, internal bool) (string, error) {
 			createdInternal = internal
 			return "net-strict-123", nil
@@ -38,7 +38,7 @@ func TestCreateSession_StrictNetwork(t *testing.T) {
 
 func TestCreateSession_NoNetworkByDefault(t *testing.T) {
 	networkCreated := false
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		NetworkCreateFn: func(_ context.Context, _ string, _ bool) (string, error) {
 			networkCreated = true
 			return "net-xyz", nil

@@ -298,14 +298,6 @@ func (d *dockerRuntime) ImageExists(ctx context.Context, ref string) (bool, erro
 	return true, nil
 }
 
-func (d *dockerRuntime) Ping(ctx context.Context) error {
-	_, err := d.client.Ping(ctx)
-	if err != nil {
-		return fmt.Errorf("docker ping: %w", err)
-	}
-	return nil
-}
-
 // parseBind splits a bind string (src:dst[:opts]) into components.
 func parseBind(bind string) (src, dst string, opts []string) {
 	parts := strings.SplitN(bind, ":", 3)

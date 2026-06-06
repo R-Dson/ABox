@@ -64,8 +64,11 @@ func newSetEditorCmd() *cobra.Command {
 			}
 
 			if cfgPath == "" {
-				dir, _ := os.UserConfigDir()
-				cfgPath = dir + "/abx/config.json"
+				dir, err := os.UserConfigDir()
+				if err != nil {
+					return fmt.Errorf("resolving user config directory: %w", err)
+				}
+				cfgPath = filepath.Join(dir, "abx", "config.json")
 			}
 
 			return writeConfigField(cfgPath, "editor", name)

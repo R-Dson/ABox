@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -101,15 +102,11 @@ func bootstrapOwnership(ctx context.Context, rt runtime.ContainerRuntime, sess *
 		chownTargets = append(chownTargets, "/vol/workspace")
 	}
 
-	// Join targets for the chown command
-	targetStr := ""
-	for _, t := range chownTargets {
-		targetStr += t + " "
-	}
+	chownCommand := fmt.Sprintf("chown -R %d:%d %s", uid, gid, strings.Join(chownTargets, " "))
 
 	spec := runtime.ContainerSpec{
 		Image:      runtime.SyncImage,
-		Cmd:        []string{"sh", "-c", fmt.Sprintf("chown -R %d:%d %s", uid, gid, targetStr)},
+		Cmd:        []string{"sh", "-c", chownCommand},
 		User:       "0:0",
 		Binds:      bindMounts,
 		AutoRemove: true,

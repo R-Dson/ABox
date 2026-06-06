@@ -9,11 +9,12 @@ import (
 	"testing"
 
 	"github.com/r-dson/abox/internal/runtime"
+	"github.com/r-dson/abox/internal/runtimetest"
 	syncpkg "github.com/r-dson/abox/internal/sync"
 )
 
 func TestSyncIn_SkipsNonexistentDir(t *testing.T) {
-	err := syncpkg.In(t.Context(), &runtime.StubRuntime{}, "/nonexistent/dir", "test-vol", "/data", nil)
+	err := syncpkg.In(t.Context(), &runtimetest.StubRuntime{}, "/nonexistent/dir", "test-vol", "/data", nil)
 	if err != nil {
 		t.Fatalf("SyncIn with nonexistent dir should not error: %v", err)
 	}
@@ -21,7 +22,7 @@ func TestSyncIn_SkipsNonexistentDir(t *testing.T) {
 
 func TestSyncIn(t *testing.T) {
 	created := false
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		ContainerCreateFn: func(_ context.Context, _ runtime.ContainerSpec) (string, error) {
 			created = true
 			return "sync-c-1", nil
@@ -43,7 +44,7 @@ func TestSyncIn_StagesInsideMountedVolume(t *testing.T) {
 	mustWriteFile(t, filepath.Join(srcDir, "file.txt"), []byte("content"), 0o644)
 
 	var execCmd []string
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyToContainerFn: func(_ context.Context, _ string, _ string, content io.Reader) error {
 			if _, err := io.Copy(io.Discard, content); err != nil {
 				return fmt.Errorf("draining tar content: %w", err)

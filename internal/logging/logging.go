@@ -13,7 +13,7 @@ import (
 // Setup configures the global slog logger.
 // When verbose is true, logs are written to ~/.local/state/abx/abx.log.
 // When jsonOutput is true, stderr gets JSON-formatted logs.
-func Setup(verbose, jsonOutput bool) {
+func Setup(verbose, jsonOutput bool) error {
 	level := slog.LevelInfo
 	if verbose {
 		level = slog.LevelDebug
@@ -24,14 +24,16 @@ func Setup(verbose, jsonOutput bool) {
 
 	if verbose {
 		logDir := filepath.Join(config.HomeDir(), ".local", "state", "abx")
-		if err := os.MkdirAll(logDir, 0o700); err == nil {
-			f, err := os.OpenFile(
-				filepath.Join(logDir, "abx.log"),
-				os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-			if err == nil {
-				handlers = append(handlers, slog.NewTextHandler(f, opts))
-			}
+		if err := os.MkdirAll(logDir, 0o700); err != nil {
+			return fmt.Errorf("creating log directory: %w", err)
 		}
+		f, err := os.OpenFile(
+			filepath.Join(logDir, "abx.log"),
+			os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			return fmt.Errorf("opening log file: %w", err)
+		}
+		handlers = append(handlers, slog.NewTextHandler(f, opts))
 	}
 
 	if jsonOutput || !isTerminal(os.Stderr) {
@@ -47,6 +49,7 @@ func Setup(verbose, jsonOutput bool) {
 		handler = &multiHandler{handlers: handlers}
 	}
 	slog.SetDefault(slog.New(handler))
+	return nil
 }
 
 func isTerminal(f *os.File) bool {

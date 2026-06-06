@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/r-dson/abox/internal/runtime"
+	"github.com/r-dson/abox/internal/runtimetest"
 )
 
 func TestPrepareRawTerminalRestoresState(t *testing.T) {
@@ -51,7 +51,7 @@ func TestPrepareRawTerminalSkipsNonTTY(t *testing.T) {
 func TestResizeContainerTTY(t *testing.T) {
 	var gotHeight uint
 	var gotWidth uint
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		ContainerResizeFn: func(_ context.Context, _ string, height, width uint) error {
 			gotHeight = height
 			gotWidth = width
@@ -74,7 +74,7 @@ func TestForwardContainerSignal(t *testing.T) {
 	signals := make(chan os.Signal, 1)
 	done := make(chan struct{})
 	var gotSignal string
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		ContainerSignalFn: func(_ context.Context, _ string, signal string) error {
 			gotSignal = signal
 			close(done)

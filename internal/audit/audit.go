@@ -15,6 +15,8 @@ const (
 	Warn Status = "warn"
 )
 
+var sensitiveWorkspacePaths = []string{".env", ".ssh/id_rsa"}
+
 // Check represents a single audit finding.
 type Check struct {
 	Name   string
@@ -44,10 +46,8 @@ func Run(_ context.Context, workdir string) (*Result, error) {
 	return result, nil
 }
 
-// CheckWorkdirSafety returns Fail if the workdir is $HOME or /.
-// It resolves symlinks to prevent sandbox escape.
+// CheckWorkdirSafety returns Fail if the workdir resolves to $HOME or /.
 func CheckWorkdirSafety(workdir string) Status {
-	// Resolve symlinks first
 	abs, err := filepath.EvalSymlinks(workdir)
 	if err != nil {
 		return Fail
@@ -65,8 +65,7 @@ func CheckWorkdirSafety(workdir string) Status {
 
 // CheckSensitiveFiles returns Warn if known sensitive files exist in workdir.
 func CheckSensitiveFiles(workdir string) Status {
-	sensitive := []string{".env", ".ssh/id_rsa"}
-	for _, name := range sensitive {
+	for _, name := range sensitiveWorkspacePaths {
 		if _, err := os.Stat(filepath.Join(workdir, name)); err == nil {
 			return Warn
 		}

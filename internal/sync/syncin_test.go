@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/r-dson/abox/internal/runtime"
+	"github.com/r-dson/abox/internal/runtimetest"
 	syncpkg "github.com/r-dson/abox/internal/sync"
 )
 
@@ -19,7 +19,7 @@ func TestSyncIn_StreamsTarToContainer(t *testing.T) {
 	mustWriteFile(t, dir+"/app.go", []byte("package main"), 0o644)
 
 	var capturedContent []byte
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyToContainerFn: func(_ context.Context, _, _ string, content io.Reader) error {
 			data, _ := io.ReadAll(content)
 			capturedContent = data
@@ -51,7 +51,7 @@ func TestSyncIn_ReplacesContentsFromStagingDirectory(t *testing.T) {
 	mustWriteFile(t, dir+"/file.txt", []byte("data"), 0o644)
 
 	var execCmds [][]string
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyToContainerFn: func(_ context.Context, _, _ string, content io.Reader) error {
 			if _, err := io.Copy(io.Discard, content); err != nil {
 				return fmt.Errorf("draining tar content: %w", err)
@@ -88,7 +88,7 @@ func TestSyncIn_ChownsDestinationForEditorUser(t *testing.T) {
 	mustWriteFile(t, dir+"/file.txt", []byte("data"), 0o644)
 
 	var execCmds [][]string
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyToContainerFn: func(_ context.Context, _, _ string, content io.Reader) error {
 			if _, err := io.Copy(io.Discard, content); err != nil {
 				return fmt.Errorf("draining tar content: %w", err)
@@ -121,7 +121,7 @@ func TestSyncIn_StreamsToStagingPath(t *testing.T) {
 	mustWriteFile(t, dir+"/x.go", []byte("x"), 0o644)
 
 	var capturedDst string
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		CopyToContainerFn: func(_ context.Context, _, dst string, content io.Reader) error {
 			capturedDst = dst
 			if _, err := io.Copy(io.Discard, content); err != nil {

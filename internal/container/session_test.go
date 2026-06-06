@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/r-dson/abox/internal/container"
-	"github.com/r-dson/abox/internal/runtime"
+	"github.com/r-dson/abox/internal/runtimetest"
 )
 
 func TestSession_CleanupRemovesVolumes(t *testing.T) {
 	removedVolumes := []string{}
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		VolumeRemoveFn: func(_ context.Context, name string, _ bool) error {
 			removedVolumes = append(removedVolumes, name)
 			return nil
@@ -53,7 +53,7 @@ func TestSession_CleanupRemovesVolumes(t *testing.T) {
 
 func TestSession_CleanupRemovesNetwork(t *testing.T) {
 	networkRemoved := false
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		NetworkRemoveFn: func(_ context.Context, id string) error {
 			networkRemoved = true
 			if id != "net-abc" {
@@ -77,7 +77,7 @@ func TestSession_CleanupRemovesNetwork(t *testing.T) {
 func TestSession_CleanupSkipsEmptyFields(t *testing.T) {
 	removedVolumes := []string{}
 	networkRemoved := false
-	stub := &runtime.StubRuntime{
+	stub := &runtimetest.StubRuntime{
 		VolumeRemoveFn: func(_ context.Context, name string, _ bool) error {
 			removedVolumes = append(removedVolumes, name)
 			return nil

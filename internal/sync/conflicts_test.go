@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/r-dson/abox/internal/config"
 	syncpkg "github.com/r-dson/abox/internal/sync"
 )
 
@@ -42,8 +41,8 @@ func TestDetectConflicts_FileModified(t *testing.T) {
 
 	snap, _ := syncpkg.SnapshotMtimes([]string{dir})
 
-	time.Sleep(10 * time.Millisecond)
 	mustWriteFile(t, file, []byte("modified"), 0o644)
+	setModTime(t, file, time.Now().Add(time.Second))
 
 	conflicts := snap.DetectConflicts()
 
@@ -89,8 +88,9 @@ func TestSnapshotMtimes_MultipleDirs(t *testing.T) {
 
 	snap, _ := syncpkg.SnapshotMtimes([]string{dir1, dir2})
 
-	time.Sleep(10 * time.Millisecond)
-	mustWriteFile(t, filepath.Join(dir1, "a.txt"), []byte("modified"), 0o644)
+	changedFile := filepath.Join(dir1, "a.txt")
+	mustWriteFile(t, changedFile, []byte("modified"), 0o644)
+	setModTime(t, changedFile, time.Now().Add(time.Second))
 
 	conflicts := snap.DetectConflicts()
 	if len(conflicts) != 1 {
@@ -98,19 +98,9 @@ func TestSnapshotMtimes_MultipleDirs(t *testing.T) {
 	}
 }
 
-func TestSnapshotMtimes_UsesProfile(t *testing.T) {
-	registry, _ := config.LoadEditorRegistry()
-	profile, _ := registry.Get("claude")
-
-	home := t.TempDir()
-	mustMkdirAll(t, profile.ConfigFullPath(home))
-	mustWriteFile(t, filepath.Join(profile.ConfigFullPath(home), "settings.json"), []byte("{}"), 0o644)
-
-	snap, err := syncpkg.SnapshotMtimesFromProfile(profile, home)
-	if err != nil {
-		t.Fatalf("SnapshotMtimesFromProfile() error: %v", err)
-	}
-	if snap == nil {
-		t.Fatal("SnapshotMtimesFromProfile() returned nil")
+func setModTime(t *testing.T, path string, modTime time.Time) {
+	t.Helper()
+	if err := os.Chtimes(path, modTime, modTime); err != nil {
+		t.Fatalf("setting mtime: %v", err)
 	}
 }
