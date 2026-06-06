@@ -2,6 +2,8 @@ package container_test
 
 import (
 	"context"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/r-dson/abox/internal/config"
@@ -12,6 +14,7 @@ import (
 func TestRun_CreatesAndStartsContainer(t *testing.T) {
 	created := false
 	started := false
+	attached := false
 	waited := false
 
 	stub := &runtime.StubRuntime{
@@ -27,6 +30,13 @@ func TestRun_CreatesAndStartsContainer(t *testing.T) {
 			}
 			return nil
 		},
+		ContainerAttachFn: func(_ context.Context, id string) (io.ReadWriteCloser, error) {
+			attached = true
+			if id != "container-123" {
+				t.Errorf("ContainerAttach id = %q, want container-123", id)
+			}
+			return testReadWriteCloser{reader: strings.NewReader("")}, nil
+		},
 		ContainerWaitFn: func(context.Context, string) (int64, error) {
 			waited = true
 			return 0, nil
@@ -40,7 +50,7 @@ func TestRun_CreatesAndStartsContainer(t *testing.T) {
 	sess, _ := container.CreateSession(t.Context(), stub, profile, cfg, false)
 	defer sess.Cleanup(t.Context())
 
-	spec := container.BuildSpec(profile, sess, "/workspace", cfg)
+	spec := mustBuildSpec(t, profile, sess, "/workspace", cfg)
 	exitCode, err := container.Run(t.Context(), stub, spec)
 	if err != nil {
 		t.Fatalf("Run() error: %v", err)
@@ -52,12 +62,31 @@ func TestRun_CreatesAndStartsContainer(t *testing.T) {
 	if !started {
 		t.Error("ContainerStart was not called")
 	}
+	if !attached {
+		t.Error("ContainerAttach was not called")
+	}
 	if !waited {
 		t.Error("ContainerWait was not called")
 	}
 	if exitCode != 0 {
 		t.Errorf("exitCode = %d, want 0", exitCode)
 	}
+}
+
+type testReadWriteCloser struct {
+	reader io.Reader
+}
+
+func (r testReadWriteCloser) Read(p []byte) (int, error) {
+	return r.reader.Read(p) //nolint:wrapcheck // io.Reader implementations must preserve io.EOF.
+}
+
+func (testReadWriteCloser) Write(p []byte) (int, error) {
+	return len(p), nil
+}
+
+func (testReadWriteCloser) Close() error {
+	return nil
 }
 
 func TestRun_PropagatesExitCode(t *testing.T) {
@@ -69,7 +98,7 @@ func TestRun_PropagatesExitCode(t *testing.T) {
 		ContainerWaitFn:  func(context.Context, string) (int64, error) { return 42, nil },
 	}
 
-	spec := container.BuildSpec(
+	spec := mustBuildSpec(t,
 		config.EditorProfile{ImageTag: "test", CmdName: "sh"},
 		container.NewSession("t", stub, container.Volumes{}),
 		"/workspace",

@@ -45,8 +45,10 @@ func Run(_ context.Context, workdir string) (*Result, error) {
 }
 
 // CheckWorkdirSafety returns Fail if the workdir is $HOME or /.
+// It resolves symlinks to prevent sandbox escape.
 func CheckWorkdirSafety(workdir string) Status {
-	abs, err := filepath.Abs(workdir)
+	// Resolve symlinks first
+	abs, err := filepath.EvalSymlinks(workdir)
 	if err != nil {
 		return Fail
 	}

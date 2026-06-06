@@ -19,6 +19,8 @@ type StubRuntime struct {
 	ContainerWaitFn     func(ctx context.Context, id string) (int64, error)
 	ContainerRemoveFn   func(ctx context.Context, id string, force bool) error
 	ContainerAttachFn   func(ctx context.Context, id string) (io.ReadWriteCloser, error)
+	ContainerResizeFn   func(ctx context.Context, id string, height, width uint) error
+	ContainerSignalFn   func(ctx context.Context, id, signal string) error
 	ContainerExecFn     func(ctx context.Context, id string, cmd []string) (int64, error)
 	CopyToContainerFn   func(ctx context.Context, id, dstPath string, content io.Reader) error
 	CopyFromContainerFn func(ctx context.Context, id, srcPath string) (io.ReadCloser, error)
@@ -88,6 +90,20 @@ func (s *StubRuntime) ContainerAttach(ctx context.Context, id string) (io.ReadWr
 		return s.ContainerAttachFn(ctx, id)
 	}
 	return nopRWC{}, nil
+}
+
+func (s *StubRuntime) ContainerResize(ctx context.Context, id string, height, width uint) error {
+	if s.ContainerResizeFn != nil {
+		return s.ContainerResizeFn(ctx, id, height, width)
+	}
+	return nil
+}
+
+func (s *StubRuntime) ContainerSignal(ctx context.Context, id, signal string) error {
+	if s.ContainerSignalFn != nil {
+		return s.ContainerSignalFn(ctx, id, signal)
+	}
+	return nil
 }
 
 func (s *StubRuntime) ContainerExec(ctx context.Context, id string, cmd []string) (int64, error) {

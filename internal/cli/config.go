@@ -84,7 +84,7 @@ func writeConfigField(path, key, value string) error {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 
-	data := map[string]string{}
+	data := map[string]any{}
 	if existing, err := os.ReadFile(path); err == nil {
 		if err := json.Unmarshal(existing, &data); err != nil {
 			return fmt.Errorf("parsing config: %w", err)

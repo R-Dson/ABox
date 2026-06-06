@@ -17,6 +17,7 @@ func TestRootCmd_RunEIsWired(t *testing.T) {
 }
 
 func TestRootCmd_DefaultWorkdir(t *testing.T) {
+	t.Setenv("ABOX_RUNTIME", "invalid")
 	root := cli.NewRootCmd("test")
 	root.SetArgs([]string{}) // no args = default workdir "."
 	root.SetOut(io.Discard)

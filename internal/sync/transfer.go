@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -29,6 +30,12 @@ func In(ctx context.Context, rt runtime.ContainerRuntime, srcDir, volumeName, ds
 	}
 	defer cleanup()
 
+	stagingPath := path.Join(dstPath, ".abx-tmp")
+	if _, err := rt.ContainerExec(ctx, containerID,
+		[]string{"sh", "-c", "rm -rf " + stagingPath + " && mkdir -p " + stagingPath}); err != nil {
+		return fmt.Errorf("preparing staging path in volume: %w", err)
+	}
+
 	// Stream tar via pipe; CloseWithError propagates tar errors to the reader side.
 	pr, pw := io.Pipe()
 	go func() {
@@ -39,15 +46,13 @@ func In(ctx context.Context, rt runtime.ContainerRuntime, srcDir, volumeName, ds
 		pw.Close()
 	}()
 
-	stagingPath := dstPath + ".abx-tmp"
 	if err := rt.CopyToContainer(ctx, containerID, stagingPath, pr); err != nil {
 		return fmt.Errorf("streaming %s to volume: %w", srcDir, err)
 	}
 
-	// Atomic rename inside the container
-	if _, err := rt.ContainerExec(ctx, containerID,
-		[]string{"mv", "-T", stagingPath, dstPath}); err != nil {
-		return fmt.Errorf("atomic rename in volume: %w", err)
+	replaceCmd := fmt.Sprintf("find %[1]s -mindepth 1 -maxdepth 1 ! -name .abx-tmp -exec rm -rf {} + && cp -a %[2]s/. %[1]s/ && rm -rf %[2]s && chown -R %[3]d:%[4]d %[1]s", dstPath, stagingPath, os.Getuid(), os.Getgid())
+	if _, err := rt.ContainerExec(ctx, containerID, []string{"sh", "-c", replaceCmd}); err != nil {
+		return fmt.Errorf("replacing volume contents: %w", err)
 	}
 
 	return nil
@@ -61,24 +66,61 @@ func Out(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, 
 		slog.DebugContext(ctx, "sync dest does not exist, skipping", "path", destDir)
 		return nil
 	}
+	return out(ctx, rt, volumeName, srcPath, destDir)
+}
 
+// OutFile transfers a single-file archive from a container volume to a host file.
+// Unlike Out, it creates the destination file when its parent directory exists.
+func OutFile(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, destFile string) error {
+	if err := os.MkdirAll(filepath.Dir(destFile), 0o755); err != nil {
+		return fmt.Errorf("creating file destination parent: %w", err)
+	}
+	return outFile(ctx, rt, volumeName, srcPath, destFile)
+}
+
+func outFile(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, destFile string) error {
 	containerID, cleanup, err := mountVolumeContainer(ctx, rt, volumeName)
 	if err != nil {
 		return fmt.Errorf("mounting volume %s: %w", volumeName, err)
 	}
 	defer cleanup()
 
-	stream, err := rt.CopyFromContainer(ctx, containerID, srcPath)
+	expectedName := filepath.Base(destFile)
+	stream, err := rt.CopyFromContainer(ctx, containerID, path.Join(srcPath, expectedName))
 	if err != nil {
 		return fmt.Errorf("copying from container: %w", err)
 	}
 	defer stream.Close()
 
-	if err := extractTar(stream, destDir); err != nil {
+	if err := extractTarToFile(stream, destFile, expectedName); err != nil {
 		return fmt.Errorf("extracting tar: %w", err)
 	}
 
 	return nil
+}
+
+func out(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, destPath string) error {
+	containerID, cleanup, err := mountVolumeContainer(ctx, rt, volumeName)
+	if err != nil {
+		return fmt.Errorf("mounting volume %s: %w", volumeName, err)
+	}
+	defer cleanup()
+
+	stream, err := rt.CopyFromContainer(ctx, containerID, directoryContentsPath(srcPath))
+	if err != nil {
+		return fmt.Errorf("copying from container: %w", err)
+	}
+	defer stream.Close()
+
+	if err := extractTar(stream, destPath); err != nil {
+		return fmt.Errorf("extracting tar: %w", err)
+	}
+
+	return nil
+}
+
+func directoryContentsPath(srcPath string) string {
+	return strings.TrimRight(srcPath, "/") + "/."
 }
 
 // mountVolumeContainer creates a short-lived container with the volume mounted.
@@ -117,6 +159,20 @@ func TarFiltered(dir string, w io.Writer, matcher *exclusion.Matcher) error {
 	tw := tar.NewWriter(w)
 	defer tw.Close()
 
+	rootInfo, err := os.Lstat(dir)
+	if err != nil {
+		return fmt.Errorf("stat source: %w", err)
+	}
+	if !rootInfo.IsDir() {
+		if matcher != nil && matcher.Match(filepath.ToSlash(filepath.Base(dir))) {
+			return nil
+		}
+		if err := writeTarFile(tw, dir, filepath.Base(dir)); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -144,46 +200,99 @@ func TarFiltered(dir string, w io.Writer, matcher *exclusion.Matcher) error {
 			return nil
 		}
 
-		info, infoErr := d.Info()
-		if infoErr != nil {
-			return fmt.Errorf("file info: %w", infoErr)
-		}
-
-		header, hErr := tar.FileInfoHeader(info, "")
-		if hErr != nil {
-			return fmt.Errorf("tar header: %w", hErr)
-		}
-		header.Name = rel
-
-		if err := tw.WriteHeader(header); err != nil {
-			return fmt.Errorf("write header: %w", err)
-		}
-
-		f, openErr := os.Open(path)
-		if openErr != nil {
-			return fmt.Errorf("open file: %w", openErr)
-		}
-		defer f.Close()
-
-		if _, err := io.Copy(tw, f); err != nil {
-			return fmt.Errorf("copy file content: %w", err)
-		}
-
-		return nil
+		return writeTarFile(tw, path, rel)
 	}); err != nil {
 		return fmt.Errorf("walking directory: %w", err)
 	}
 	return nil
 }
 
-// extractTar extracts a tar archive to the destination directory.
-// Validates that all extracted paths stay within dest to prevent path traversal.
-func extractTar(r io.Reader, dest string) error {
-	cleanDest := filepath.Clean(dest)
-	if !strings.HasSuffix(cleanDest, string(os.PathSeparator)) {
-		cleanDest += string(os.PathSeparator)
+func writeTarFile(tw *tar.Writer, filePath, name string) error {
+	info, err := os.Lstat(filePath)
+	if err != nil {
+		return fmt.Errorf("file info: %w", err)
 	}
 
+	linkTarget := ""
+	if info.Mode()&os.ModeSymlink != 0 {
+		linkTarget, err = os.Readlink(filePath)
+		if err != nil {
+			return fmt.Errorf("read symlink: %w", err)
+		}
+	}
+
+	header, err := tar.FileInfoHeader(info, linkTarget)
+	if err != nil {
+		return fmt.Errorf("tar header: %w", err)
+	}
+	header.Name = filepath.ToSlash(name)
+
+	if err := tw.WriteHeader(header); err != nil {
+		return fmt.Errorf("write header: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("open file: %w", err)
+	}
+	defer file.Close()
+
+	if _, err := io.Copy(tw, file); err != nil {
+		return fmt.Errorf("copy file content: %w", err)
+	}
+	return nil
+}
+
+func extractTarToFile(r io.Reader, dest, expectedName string) error {
+	tr := tar.NewReader(r)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			return fmt.Errorf("archive contains no regular file")
+		}
+		if err != nil {
+			return fmt.Errorf("reading tar: %w", err)
+		}
+		if header.Typeflag != tar.TypeReg {
+			continue
+		}
+		if filepath.Base(header.Name) != expectedName {
+			return fmt.Errorf("archive file %q does not match expected %q", header.Name, expectedName)
+		}
+		if err := ensureFileIsNotSymlink(dest); err != nil {
+			return err
+		}
+
+		file, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+		if err != nil {
+			return fmt.Errorf("create %s: %w", dest, err)
+		}
+		if _, err := io.Copy(file, tr); err != nil {
+			_ = file.Close()
+			return fmt.Errorf("write %s: %w", dest, err)
+		}
+		if err := file.Close(); err != nil {
+			return fmt.Errorf("close %s: %w", dest, err)
+		}
+		return nil
+	}
+}
+
+// extractTar extracts a tar archive to the destination directory or file.
+// Validates that directory extractions stay within dest to prevent path traversal.
+func extractTar(r io.Reader, dest string) error {
+	destInfo, err := os.Stat(dest)
+	if err != nil {
+		return fmt.Errorf("stat destination: %w", err)
+	}
+	if !destInfo.IsDir() {
+		return extractTarToFile(r, dest, filepath.Base(dest))
+	}
+
+	cleanDest := filepath.Clean(dest)
 	tr := tar.NewReader(r)
 	for {
 		header, err := tr.Next()
@@ -195,20 +304,24 @@ func extractTar(r io.Reader, dest string) error {
 		}
 
 		target := filepath.Join(dest, header.Name)
-
-		// Path traversal check: target must be under dest
-		if !strings.HasPrefix(filepath.Clean(target), cleanDest) {
-			return fmt.Errorf("tar entry %q escapes destination", header.Name)
+		if err := ensurePathStaysInRoot(cleanDest, target, header.Name); err != nil {
+			return err
 		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
+			if err := ensurePathHasNoSymlink(cleanDest, target); err != nil {
+				return err
+			}
 			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
 				return fmt.Errorf("mkdir %s: %w", target, err)
 			}
 		case tar.TypeReg:
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return fmt.Errorf("mkdir parent %s: %w", filepath.Dir(target), err)
+			}
+			if err := ensurePathHasNoSymlink(cleanDest, target); err != nil {
+				return err
 			}
 			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
 			if err != nil {
@@ -219,6 +332,56 @@ func extractTar(r io.Reader, dest string) error {
 				return fmt.Errorf("write %s: %w", target, err)
 			}
 			f.Close()
+		}
+	}
+	return nil
+}
+
+func ensureFileIsNotSymlink(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("checking %s: %w", path, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to overwrite symlink %s", path)
+	}
+	return nil
+}
+
+func ensurePathStaysInRoot(root, target, entryName string) error {
+	rel, err := filepath.Rel(root, filepath.Clean(target))
+	if err != nil {
+		return fmt.Errorf("checking tar entry %q: %w", entryName, err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("tar entry %q escapes destination", entryName)
+	}
+	return nil
+}
+
+func ensurePathHasNoSymlink(root, target string) error {
+	rel, err := filepath.Rel(root, filepath.Clean(target))
+	if err != nil {
+		return fmt.Errorf("checking symlink path: %w", err)
+	}
+	current := root
+	for _, part := range strings.Split(rel, string(os.PathSeparator)) {
+		if part == "." || part == "" {
+			continue
+		}
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("checking %s: %w", current, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing to extract through symlink %s", current)
 		}
 	}
 	return nil

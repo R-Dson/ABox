@@ -20,6 +20,7 @@ func TestRootCmd_HasRunFlags(t *testing.T) {
 		{"strict-network"},
 		{"no-internet"},
 		{"force-sync"},
+		{"exclude-url"},
 	}
 
 	for _, tt := range tests {

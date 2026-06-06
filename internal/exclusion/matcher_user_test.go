@@ -10,7 +10,7 @@ import (
 
 func TestMatcher_UserFacingPatterns(t *testing.T) {
 	// These are patterns a user would actually write in .abxignore
-	m := exclusion.NewMatcher([]string{".env", "*.log", "build/", "node_modules/"})
+	m := exclusion.NewMatcher([]string{".env", "secrets.json", "*.log", "build/", "node_modules/"})
 
 	tests := []struct {
 		name string
@@ -18,6 +18,8 @@ func TestMatcher_UserFacingPatterns(t *testing.T) {
 		want bool
 	}{
 		{"exact file", ".env", true},
+		{"nested exact file", "services/api/.env", true},
+		{"nested exact named file", "services/api/secrets.json", true},
 		{"glob extension", "debug.log", true},
 		{"nested glob extension", "src/app.log", true},
 		{"trailing slash dir", "build/output.js", true},

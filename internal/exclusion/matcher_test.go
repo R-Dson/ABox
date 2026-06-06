@@ -1,8 +1,11 @@
 package exclusion_test
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/r-dson/abox/internal/exclusion"
@@ -76,6 +79,37 @@ func TestBuildMatcher_LoadsLocalIgnore(t *testing.T) {
 	}
 }
 
+func TestBuildMatcher_ReturnsLocalIgnoreReadError(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".abxignore"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := exclusion.BuildMatcher(t.Context(), dir)
+	if err == nil {
+		t.Fatal("expected error when .abxignore cannot be read as a file")
+	}
+}
+
+func TestBuildMatcherWithRemote_LoadsRemoteIgnore(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("remote-secret/\n*.token\n"))
+	}))
+	defer server.Close()
+
+	m, err := exclusion.BuildMatcherWithRemote(t.Context(), t.TempDir(), server.URL)
+	if err != nil {
+		t.Fatalf("BuildMatcherWithRemote() error: %v", err)
+	}
+
+	if !m.Match("remote-secret/value.txt") {
+		t.Error("remote directory pattern should match")
+	}
+	if !m.Match("api.token") {
+		t.Error("remote glob pattern should match")
+	}
+}
+
 func TestBuildMatcher_IncludesHardcoded(t *testing.T) {
 	dir := t.TempDir()
 	// No .abxignore — should still have hardcoded patterns
@@ -90,5 +124,17 @@ func TestBuildMatcher_IncludesHardcoded(t *testing.T) {
 	}
 	if !m.Match(".ssh/id_rsa") {
 		t.Error("hardcoded .ssh pattern should match")
+	}
+}
+
+func TestBuildMatcherWithRemote_RejectsOversizedRemoteIgnore(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("pattern\n", 200_000)))
+	}))
+	defer server.Close()
+
+	_, err := exclusion.BuildMatcherWithRemote(t.Context(), t.TempDir(), server.URL)
+	if err == nil {
+		t.Fatal("expected oversized remote ignore error")
 	}
 }

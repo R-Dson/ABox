@@ -14,13 +14,14 @@ var editorsJSON []byte
 
 // EditorProfile is the single typed representation of one row in editors.json.
 type EditorProfile struct {
-	Version    string   `json:"version"`
-	InstallCmd string   `json:"install_cmd"`
-	CmdName    string   `json:"cmd_name"`
-	ImageTag   string   `json:"image_tag"`
-	ConfigPath string   `json:"config_path"`
-	EnvVars    []string `json:"env_vars"`
-	LegacyPath string   `json:"legacy_path,omitzero"`
+	Version      string   `json:"version"`
+	InstallCmd   string   `json:"install_cmd"`
+	CmdName      string   `json:"cmd_name"`
+	ImageTag     string   `json:"image_tag"`
+	ConfigPath   string   `json:"config_path"`
+	ConfigIsFile bool     `json:"config_is_file,omitzero"`
+	EnvVars      []string `json:"env_vars"`
+	LegacyPath   string   `json:"legacy_path,omitzero"`
 }
 
 // CachePath returns the derived cache directory for this editor.
@@ -62,16 +63,10 @@ func LoadEditorRegistry() (*EditorRegistry, error) {
 }
 
 // Get returns the EditorProfile for the named editor.
-// Falls back to opencode if the name is not found.
 func (r *EditorRegistry) Get(name string) (EditorProfile, error) {
 	p, ok := r.profiles[name]
 	if !ok {
-		fallback, fok := r.profiles["opencode"]
-		if !fok {
-			return EditorProfile{}, fmt.Errorf(
-				"unknown editor %q and no opencode fallback — check editors.json", name)
-		}
-		return fallback, nil
+		return EditorProfile{}, fmt.Errorf("unknown editor %q (available: %v)", name, r.Names())
 	}
 	return p, nil
 }

@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -39,6 +40,31 @@ func TestTarFiltered_SingleFile(t *testing.T) {
 	_, err = tr.Next()
 	if err != io.EOF {
 		t.Errorf("expected EOF after single entry, got %v", err)
+	}
+}
+
+func TestTarFiltered_FileSource(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, ".aider.conf.yml")
+	mustWriteFile(t, filePath, []byte("model: test"), 0o600)
+
+	buf := new(bytes.Buffer)
+	err := syncpkg.TarFiltered(filePath, buf, nil)
+	if err != nil {
+		t.Fatalf("TarFiltered() error: %v", err)
+	}
+
+	tr := tar.NewReader(buf)
+	header, err := tr.Next()
+	if err != nil {
+		t.Fatalf("reading tar header: %v", err)
+	}
+	if header.Name != ".aider.conf.yml" {
+		t.Errorf("tar entry name = %q, want .aider.conf.yml", header.Name)
+	}
+	content, _ := io.ReadAll(tr)
+	if string(content) != "model: test" {
+		t.Errorf("tar entry content = %q, want model: test", string(content))
 	}
 }
 
@@ -116,5 +142,41 @@ func TestTarFiltered_PreservesPermissions(t *testing.T) {
 
 	if h.Mode != 0o755 {
 		t.Errorf("permissions = %04o, want 0755", h.Mode)
+	}
+}
+
+func TestTarFiltered_ArchivesSymlinkWithoutDereferencing(t *testing.T) {
+	workspaceDir := t.TempDir()
+	secretDir := t.TempDir()
+	secretPath := filepath.Join(secretDir, "id_rsa")
+	mustWriteFile(t, secretPath, []byte("SECRET"), 0o600)
+
+	linkPath := filepath.Join(workspaceDir, "safe-link")
+	if err := os.Symlink(secretPath, linkPath); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+
+	buf := new(bytes.Buffer)
+	if err := syncpkg.TarFiltered(workspaceDir, buf, nil); err != nil {
+		t.Fatalf("TarFiltered() error: %v", err)
+	}
+
+	tr := tar.NewReader(buf)
+	header, err := tr.Next()
+	if err != nil {
+		t.Fatalf("reading tar header: %v", err)
+	}
+	if header.Typeflag != tar.TypeSymlink {
+		t.Fatalf("tar entry type = %v, want symlink", header.Typeflag)
+	}
+	if header.Linkname != secretPath {
+		t.Fatalf("tar entry link target = %q, want %q", header.Linkname, secretPath)
+	}
+	content, err := io.ReadAll(tr)
+	if err != nil {
+		t.Fatalf("reading tar content: %v", err)
+	}
+	if string(content) == "SECRET" {
+		t.Fatal("symlink target content was archived")
 	}
 }

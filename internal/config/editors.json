@@ -24,6 +24,7 @@
       "cmd_name": "aider",
       "image_tag": "ghcr.io/r-dson/abox:aider",
       "config_path": ".aider.conf.yml",
+      "config_is_file": true,
       "env_vars": ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"],
       "legacy_path": ""
     },

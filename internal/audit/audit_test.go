@@ -2,6 +2,7 @@ package audit_test
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/r-dson/abox/internal/audit"
@@ -73,5 +74,16 @@ func TestCheckSensitiveFiles(t *testing.T) {
 	status := audit.CheckSensitiveFiles(dir)
 	if status != audit.Pass {
 		t.Errorf("clean dir = %v, want Pass", status)
+	}
+
+	// Dir with .env should warn
+	envFile := filepath.Join(dir, ".env")
+	if err := os.WriteFile(envFile, []byte("SECRET=123"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	status = audit.CheckSensitiveFiles(dir)
+	if status != audit.Warn {
+		t.Errorf("dir with .env = %v, want Warn", status)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"testing"
 
@@ -80,16 +81,171 @@ func TestRunSession_CleansUpOnVolumeFailure(t *testing.T) {
 	}
 }
 
+func TestRunSession_SyncsWorkspaceBack(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	rec := newCallRecorder()
+
+	_ = cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
+		Editor: "opencode",
+	})
+
+	if len(filter(rec.methods(), "CopyFromContainer")) == 0 {
+		t.Error("expected workspace volume to be copied back to host workdir")
+	}
+}
+
+func TestRunSession_PullsMissingImages(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	rec := newCallRecorder()
+	rec.imageExists = false
+
+	_ = cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
+		Editor:     "opencode",
+		PullPolicy: "missing",
+	})
+
+	if len(filter(rec.methods(), "ImageExists")) == 0 {
+		t.Error("expected image existence checks for missing pull policy")
+	}
+	if len(filter(rec.methods(), "ImagePull")) == 0 {
+		t.Error("expected missing images to be pulled")
+	}
+}
+
+func TestRunSession_OfflineSkipsImagePull(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	rec := newCallRecorder()
+	rec.imageExists = false
+
+	_ = cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
+		Editor:  "opencode",
+		Offline: true,
+	})
+
+	if len(filter(rec.methods(), "ImagePull")) != 0 {
+		t.Error("offline mode must not pull images")
+	}
+}
+
+func TestRunSession_NoInternetSkipsImagePull(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	rec := newCallRecorder()
+	rec.imageExists = false
+
+	_ = cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
+		Editor:     "opencode",
+		NoInternet: true,
+	})
+
+	if len(filter(rec.methods(), "ImagePull")) != 0 {
+		t.Error("no-internet mode must not pull images")
+	}
+}
+
+func TestRunSession_NoInternetRejectsExcludeURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	rec := newCallRecorder()
+
+	err := cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
+		Editor:     "opencode",
+		NoInternet: true,
+		ExcludeURL: "https://example.com/.abxignore",
+	})
+	if err == nil {
+		t.Fatal("expected no-internet with exclude-url to fail")
+	}
+	if !strings.Contains(err.Error(), "exclude-url") {
+		t.Fatalf("error = %v, want exclude-url", err)
+	}
+	if len(filter(rec.methods(), "ImagePull")) != 0 {
+		t.Error("no-internet exclude-url failure must happen before image pull")
+	}
+}
+
+func TestRunSession_DefaultPullPolicySkipsImagePull(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	rec := newCallRecorder()
+	rec.imageExists = false
+
+	_ = cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
+		Editor: "opencode",
+	})
+
+	if len(filter(rec.methods(), "ImagePull")) != 0 {
+		t.Error("default pull policy must not auto-pull mutable image tags")
+	}
+}
+
+func TestRunSession_InvalidConfigFailsBeforeRuntimeCalls(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	rec := newCallRecorder()
+
+	err := cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
+		Editor:      "opencode",
+		MemoryLimit: "not-memory",
+	})
+	if err == nil {
+		t.Fatal("expected invalid config error")
+	}
+	if len(rec.methods()) != 0 {
+		t.Fatalf("runtime calls = %v, want none", rec.methods())
+	}
+}
+
+func TestRunSession_SyncsMissingFileConfigBack(t *testing.T) {
+	dir := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	rec := newCallRecorder()
+
+	_ = cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
+		Editor: "aider",
+	})
+
+	copyFromCalls := len(filter(rec.methods(), "CopyFromContainer"))
+	if copyFromCalls < 2 {
+		t.Fatalf("CopyFromContainer calls = %d, want at least config file and workspace sync-out", copyFromCalls)
+	}
+}
+
+func TestRunSession_ReturnsSyncOutError(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	rec := newCallRecorder()
+	rec.failOn = "CopyFromContainer"
+
+	err := cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
+		Editor: "opencode",
+	})
+	if err == nil {
+		t.Fatal("expected sync-out error")
+	}
+	if _, ok := err.(*cli.ExitError); ok {
+		t.Fatalf("expected sync-out error, got ExitError: %v", err)
+	}
+	if !strings.Contains(err.Error(), "parallel sync-out") {
+		t.Fatalf("error = %v, want parallel sync-out", err)
+	}
+}
+
 // --- callRecorder wraps StubRuntime with method call recording ---
 
 type callRecorder struct {
-	mu        sync.Mutex
-	calls     []string
-	exitCode  int64
-	failOn    string
-	nextID    int
-	waitCount int
-	s         runtime.StubRuntime
+	mu          sync.Mutex
+	calls       []string
+	exitCode    int64
+	failOn      string
+	nextID      int
+	waitCount   int
+	imageExists bool
+	s           runtime.StubRuntime
 }
 
 func newCallRecorder() *callRecorder {
@@ -119,8 +275,7 @@ func newCallRecorder() *callRecorder {
 			if err := r.shouldFail("ContainerCreate"); err != nil {
 				return "", err
 			}
-			r.nextID++
-			return fmt.Sprintf("c-%d", r.nextID), nil
+			return r.nextContainerID(), nil
 		},
 		ContainerStartFn: func(_ context.Context, _ string) error {
 			r.add("ContainerStart")
@@ -155,6 +310,14 @@ func newCallRecorder() *callRecorder {
 			tw.Close()
 			return io.NopCloser(&buf), r.shouldFail("CopyFromContainer")
 		},
+		ImageExistsFn: func(_ context.Context, _ string) (bool, error) {
+			r.add("ImageExists")
+			return r.imageExists, r.shouldFail("ImageExists")
+		},
+		ImagePullFn: func(_ context.Context, _ string, _ io.Writer) error {
+			r.add("ImagePull")
+			return r.shouldFail("ImagePull")
+		},
 	}
 	return r
 }
@@ -173,6 +336,13 @@ func (r *callRecorder) methods() []string {
 	out := make([]string, len(r.calls))
 	copy(out, r.calls)
 	return out
+}
+
+func (r *callRecorder) nextContainerID() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.nextID++
+	return fmt.Sprintf("c-%d", r.nextID)
 }
 
 func (r *callRecorder) shouldFail(method string) error {

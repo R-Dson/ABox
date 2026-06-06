@@ -4,16 +4,19 @@ package exclusion
 // from workspace sync, regardless of .abxignore content.
 func HardcodedPatterns() []string {
 	return []string{
+		"**/.ssh",
 		"**/.ssh/**",
+		"**/.aws",
 		"**/.aws/**",
-		".env",
+		"**/.env",
 		"**/*.pem",
 		"**/*key",
 		"**/*_key",
+		"**/.gnupg",
 		"**/.gnupg/**",
-		"*.p12",
-		"*.pfx",
-		".netrc",
-		".npmrc",
+		"**/*.p12",
+		"**/*.pfx",
+		"**/.netrc",
+		"**/.npmrc",
 	}
 }

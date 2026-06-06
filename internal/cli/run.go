@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/docker/go-units"
 	"github.com/r-dson/abox/internal/config"
 	"github.com/r-dson/abox/internal/container"
 	"github.com/r-dson/abox/internal/exclusion"
@@ -20,15 +22,20 @@ import (
 // SessionConfig holds the resolved configuration for a run command.
 // Cobra flags bind directly to this struct.
 type SessionConfig struct {
-	Editor        string
-	Shell         bool
-	ForceIT       bool
-	Offline       bool
-	StrictNetwork bool
-	NoInternet    bool
-	ForceSync     bool
-	ExtraEnv      []string
-	EditorArgs    []string
+	Editor          string
+	Shell           bool
+	ForceIT         bool
+	Offline         bool
+	StrictNetwork   bool
+	NoInternet      bool
+	ForceSync       bool
+	ExcludeURL      string
+	PullPolicy      string
+	MemoryLimit     string
+	CPULimit        float64
+	ForwardSSHAgent bool
+	ExtraEnv        []string
+	EditorArgs      []string
 }
 
 // ExitError wraps an exit code from the container process.
@@ -53,11 +60,14 @@ var blockedEnvKeys = map[string]bool{
 // Returns KEY=VALUE pairs resolved from the host environment.
 // Dangerous variable names (PATH, HOME, etc.) are silently skipped.
 // Returns nil if the file doesn't exist.
-func LoadDotEnv(dir string) []string {
+func LoadDotEnv(dir string) ([]string, error) {
 	path := filepath.Join(dir, ".abxenv")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading .abxenv: %w", err)
 	}
 
 	var env []string
@@ -76,12 +86,19 @@ func LoadDotEnv(dir string) []string {
 			env = append(env, key+"="+val)
 		}
 	}
-	return env
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("parsing .abxenv: %w", err)
+	}
+	return env, nil
 }
 
 // RunSession runs the full session orchestration with the given runtime.
 // Exported for testability — tests inject a mock runtime.
 func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string, cfg *SessionConfig) error {
+	if err := validateSessionConfig(cfg); err != nil {
+		return err
+	}
+
 	// 1. Load editor registry and resolve editor
 	registry, err := config.LoadEditorRegistry()
 	if err != nil {
@@ -99,39 +116,59 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 	}
 
 	// 2. Build exclusion matcher
-	matcher, err := exclusion.BuildMatcher(ctx, workdir)
+	matcher, err := exclusion.BuildMatcherWithRemote(ctx, workdir, cfg.ExcludeURL)
 	if err != nil {
 		return fmt.Errorf("building exclusion matcher: %w", err)
 	}
 
-	// 3. Create container session (volumes, optional strict network)
+	if err := ensureRequiredImages(ctx, rt, profile.ImageTag, cfg); err != nil {
+		return err
+	}
+
+	resolvedConfig := &config.Config{
+		Editor:          editorName,
+		StrictNetwork:   cfg.StrictNetwork,
+		NoInternet:      cfg.NoInternet,
+		PullPolicy:      cfg.PullPolicy,
+		MemoryLimit:     cfg.MemoryLimit,
+		CPULimit:        cfg.CPULimit,
+		ForwardSSHAgent: cfg.ForwardSSHAgent,
+	}
+	if _, err := container.SeccompProfilePath(); err != nil {
+		return fmt.Errorf("materializing seccomp profile: %w", err)
+	}
+
+	home := config.HomeDir()
 	hasWorkspaceVol := matcher.HasPatterns()
-	sess, err := container.CreateSession(ctx, rt, profile, &config.Config{
-		Editor:        editorName,
-		StrictNetwork: cfg.StrictNetwork,
-		NoInternet:    cfg.NoInternet,
-	}, hasWorkspaceVol)
+	snapshotDirs := []string{
+		profile.ConfigFullPath(home),
+		profile.CachePath(home),
+		profile.StatePath(home),
+		profile.SharePath(home),
+	}
+	if hasWorkspaceVol {
+		snapshotDirs = append(snapshotDirs, workdir)
+	}
+	snap, err := sync.SnapshotMtimes(snapshotDirs)
+	if err != nil {
+		return fmt.Errorf("snapshotting mtimes: %w", err)
+	}
+
+	// 3. Create container session (volumes, optional strict network)
+	sess, err := container.CreateSession(ctx, rt, profile, resolvedConfig, hasWorkspaceVol)
 	if err != nil {
 		return fmt.Errorf("creating session: %w", err)
 	}
 	defer sess.Cleanup(context.Background())
 
-	home := config.HomeDir()
-
-	// 4. Snapshot mtimes before sync-in
-	snap, err := sync.SnapshotMtimesFromProfile(profile, home)
-	if err != nil {
-		slog.WarnContext(ctx, "mtime snapshot failed, continuing without conflict detection", "error", err)
-		snap = nil
-	}
-
-	// 5. SyncIn: host → container volumes (parallel)
 	syncDirs := map[string]string{
 		sess.Vol.ConfigVol: profile.ConfigFullPath(home),
 		sess.Vol.CacheVol:  profile.CachePath(home),
 		sess.Vol.StateVol:  profile.StatePath(home),
 		sess.Vol.ShareVol:  profile.SharePath(home),
 	}
+
+	// 4. SyncIn: host → container volumes (parallel, bounded concurrency)
 
 	g, gctx := errgroup.WithContext(ctx)
 	for vol, srcDir := range syncDirs {
@@ -160,11 +197,11 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 	}
 
 	// 6. Build spec and run the editor container
-	spec := container.BuildSpec(profile, sess, workdir, &config.Config{
-		Editor:        editorName,
-		StrictNetwork: cfg.StrictNetwork,
-		NoInternet:    cfg.NoInternet,
-	})
+	spec, err := container.BuildSpec(profile, sess, workdir, resolvedConfig)
+	if err != nil {
+		return fmt.Errorf("building container spec: %w", err)
+	}
+	spec.Tty = shouldAllocateTTY(isTerminalFile(os.Stdin), cfg.Shell, cfg.ForceIT)
 
 	if len(cfg.ExtraEnv) > 0 {
 		spec.Env = append(spec.Env, cfg.ExtraEnv...)
@@ -193,25 +230,120 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		}
 	}
 
-	// 8. SyncOut: container → host (parallel, best-effort)
-	g, _ = errgroup.WithContext(ctx)
+	// 8. SyncOut: container → host (parallel, bounded concurrency)
+	if sess.Vol.WorkspaceVol != "" {
+		syncDirs[sess.Vol.WorkspaceVol] = workdir
+	}
+
+	g, gctx = errgroup.WithContext(ctx)
 	for vol, srcDir := range syncDirs {
 		vol, srcDir := vol, srcDir
 		g.Go(func() error {
-			if err := sync.Out(ctx, rt, vol, "/data", srcDir); err != nil {
-				slog.WarnContext(ctx, "sync-out failed", "dir", srcDir, "error", err)
+			var err error
+			if profile.ConfigIsFile && vol == sess.Vol.ConfigVol {
+				err = sync.OutFile(gctx, rt, vol, "/data", srcDir)
+			} else {
+				err = sync.Out(gctx, rt, vol, "/data", srcDir)
+			}
+			if err != nil {
+				return fmt.Errorf("sync-out %s: %w", srcDir, err)
 			}
 			return nil
 		})
 	}
-	_ = g.Wait()
+	if err := g.Wait(); err != nil {
+		return fmt.Errorf("parallel sync-out: %w", err)
+	}
 
 	return &ExitError{Code: exitCode}
 }
 
 // ValidateWorkdir rejects unsafe workspace paths.
 // Expects an absolute path.
+func shouldAllocateTTY(hasTerminalInput, shell, forceInteractive bool) bool {
+	return hasTerminalInput || shell || forceInteractive
+}
+
+func isTerminalFile(file *os.File) bool {
+	info, err := file.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
+}
+
+func validateSessionConfig(cfg *SessionConfig) error {
+	if cfg.NoInternet && cfg.ExcludeURL != "" {
+		return fmt.Errorf("--exclude-url cannot be used with --no-internet")
+	}
+	if cfg.CPULimit < 0 {
+		return fmt.Errorf("cpu limit must be non-negative")
+	}
+	if cfg.MemoryLimit != "" {
+		if _, err := units.RAMInBytes(cfg.MemoryLimit); err != nil {
+			return fmt.Errorf("parsing memory limit %q: %w", cfg.MemoryLimit, err)
+		}
+	}
+	pullPolicy := cfg.PullPolicy
+	if pullPolicy == "" {
+		pullPolicy = "never"
+	}
+	if pullPolicy != "never" && pullPolicy != "always" && pullPolicy != "missing" {
+		return fmt.Errorf("unsupported pull policy %q: use always, missing, or never", pullPolicy)
+	}
+	return nil
+}
+
+func ensureRequiredImages(ctx context.Context, rt runtime.ContainerRuntime, editorImage string, cfg *SessionConfig) error {
+	pullPolicy := cfg.PullPolicy
+	if pullPolicy == "" {
+		pullPolicy = "never"
+	}
+	if cfg.Offline || cfg.NoInternet {
+		pullPolicy = "never"
+	}
+
+	for _, image := range []string{runtime.SyncImage, editorImage} {
+		if err := ensureImage(ctx, rt, image, pullPolicy); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureImage(ctx context.Context, rt runtime.ContainerRuntime, image, pullPolicy string) error {
+	switch pullPolicy {
+	case "never":
+		return nil
+	case "always":
+		if err := rt.ImagePull(ctx, image, io.Discard); err != nil {
+			return fmt.Errorf("pulling image %s: %w", image, err)
+		}
+		return nil
+	case "missing":
+		exists, err := rt.ImageExists(ctx, image)
+		if err != nil {
+			return fmt.Errorf("checking image %s: %w", image, err)
+		}
+		if exists {
+			return nil
+		}
+		if err := rt.ImagePull(ctx, image, io.Discard); err != nil {
+			return fmt.Errorf("pulling image %s: %w", image, err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported pull policy %q: use always, missing, or never", pullPolicy)
+	}
+}
+
 func ValidateWorkdir(abs string) error {
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return fmt.Errorf("workspace %s does not exist", abs)
+	}
+	abs = resolved
+
 	home, _ := os.UserHomeDir()
 	if home != "" && abs == home {
 		return fmt.Errorf("cannot use $HOME (%s) as workspace", abs)

@@ -2,11 +2,16 @@ package exclusion
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 )
@@ -15,6 +20,11 @@ import (
 type Matcher struct {
 	patterns []string
 }
+
+const (
+	remoteIgnoreMaxBytes = 1 << 20
+	remoteIgnoreTimeout  = 10 * time.Second
+)
 
 // NewMatcher creates a Matcher with the given patterns.
 // User-facing patterns are normalized for doublestar compatibility:
@@ -41,14 +51,65 @@ func (m *Matcher) HasPatterns() bool {
 
 // BuildMatcher composes patterns from hardcoded security patterns
 // and the local .abxignore file in the workspace.
-func BuildMatcher(_ context.Context, workdir string) (*Matcher, error) {
+func BuildMatcher(ctx context.Context, workdir string) (*Matcher, error) {
+	return BuildMatcherWithRemote(ctx, workdir, "")
+}
+
+func BuildMatcherWithRemote(ctx context.Context, workdir, excludeURL string) (*Matcher, error) {
 	patterns := HardcodedPatterns()
 
-	if local, err := loadLocalIgnore(workdir); err == nil {
+	local, err := loadLocalIgnore(workdir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if err == nil {
 		patterns = mergePatterns(patterns, normalizePatterns(local))
+	}
+	if excludeURL != "" {
+		remote, err := loadRemoteIgnore(ctx, excludeURL)
+		if err != nil {
+			return nil, err
+		}
+		patterns = mergePatterns(patterns, normalizePatterns(remote))
 	}
 
 	return &Matcher{patterns: patterns}, nil
+}
+
+func loadRemoteIgnore(ctx context.Context, excludeURL string) ([]string, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, excludeURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating exclude URL request: %w", err)
+	}
+	client := &http.Client{Timeout: remoteIgnoreTimeout}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("fetching exclude URL: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("fetching exclude URL: unexpected status %s", response.Status)
+	}
+	body, err := readLimitedRemoteBody(response.Body, remoteIgnoreMaxBytes)
+	if err != nil {
+		return nil, fmt.Errorf("reading exclude URL: %w", err)
+	}
+	patterns, err := readIgnorePatterns(bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("parsing exclude URL: %w", err)
+	}
+	return patterns, nil
+}
+
+func readLimitedRemoteBody(r io.Reader, maxBytes int64) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("reading remote ignore body: %w", err)
+	}
+	if int64(len(body)) > maxBytes {
+		return nil, fmt.Errorf("remote ignore body exceeds %d bytes", maxBytes)
+	}
+	return body, nil
 }
 
 func loadLocalIgnore(workdir string) ([]string, error) {
@@ -59,8 +120,12 @@ func loadLocalIgnore(workdir string) ([]string, error) {
 	}
 	defer f.Close()
 
+	return readIgnorePatterns(f)
+}
+
+func readIgnorePatterns(r io.Reader) ([]string, error) {
 	var patterns []string
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -69,7 +134,7 @@ func loadLocalIgnore(workdir string) ([]string, error) {
 		patterns = append(patterns, line)
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("reading ignore file: %w", err)
+		return nil, fmt.Errorf("reading ignore patterns: %w", err)
 	}
 	return patterns, nil
 }
@@ -114,10 +179,9 @@ func normalizePattern(p string) string {
 		return "**/" + p
 	}
 
-	// Exact name match: match at any depth: ".env" → "**/.env" or exact
-	// But if it has no glob chars, keep exact for top-level and add globstar
+	// Exact name match: match at any depth: ".env" → "**/.env".
 	if !hasGlobChars(p) {
-		return p // exact match at top level is fine
+		return "**/" + p
 	}
 
 	return p

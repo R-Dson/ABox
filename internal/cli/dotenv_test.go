@@ -66,7 +66,10 @@ func TestLoadDotEnv(t *testing.T) {
 				}
 			}
 
-			got := cli.LoadDotEnv(dir)
+			got, err := cli.LoadDotEnv(dir)
+			if err != nil {
+				t.Fatalf("LoadDotEnv() error: %v", err)
+			}
 			if len(got) != len(tt.want) {
 				t.Fatalf("got %v, want %v", got, tt.want)
 			}
@@ -81,8 +84,23 @@ func TestLoadDotEnv(t *testing.T) {
 
 func TestLoadDotEnv_NoFile(t *testing.T) {
 	dir := t.TempDir()
-	got := cli.LoadDotEnv(dir)
+	got, err := cli.LoadDotEnv(dir)
+	if err != nil {
+		t.Fatalf("LoadDotEnv() error: %v", err)
+	}
 	if got != nil {
 		t.Errorf("expected nil for missing .abxenv, got %v", got)
+	}
+}
+
+func TestLoadDotEnv_ReturnsReadError(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".abxenv"), 0o755); err != nil {
+		t.Fatalf("creating .abxenv directory fixture: %v", err)
+	}
+
+	_, err := cli.LoadDotEnv(dir)
+	if err == nil {
+		t.Fatal("expected read error")
 	}
 }

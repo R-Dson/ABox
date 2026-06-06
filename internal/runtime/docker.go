@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
 	dockercontainer "github.com/docker/docker/api/types/container"
@@ -176,6 +177,20 @@ func (d *dockerRuntime) ContainerAttach(ctx context.Context, id string) (io.Read
 	return resp.Conn, nil
 }
 
+func (d *dockerRuntime) ContainerResize(ctx context.Context, id string, height, width uint) error {
+	if err := d.client.ContainerResize(ctx, id, dockercontainer.ResizeOptions{Height: height, Width: width}); err != nil {
+		return fmt.Errorf("resizing container: %w", err)
+	}
+	return nil
+}
+
+func (d *dockerRuntime) ContainerSignal(ctx context.Context, id, signal string) error {
+	if err := d.client.ContainerKill(ctx, id, signal); err != nil {
+		return fmt.Errorf("signaling container: %w", err)
+	}
+	return nil
+}
+
 func (d *dockerRuntime) ContainerExec(ctx context.Context, id string, cmd []string) (int64, error) {
 	execConfig := dockercontainer.ExecOptions{
 		AttachStdout: true,
@@ -189,11 +204,47 @@ func (d *dockerRuntime) ContainerExec(ctx context.Context, id string, cmd []stri
 	if err := d.client.ContainerExecStart(ctx, execResp.ID, dockercontainer.ExecStartOptions{}); err != nil {
 		return -1, fmt.Errorf("starting exec: %w", err)
 	}
-	resp, err := d.client.ContainerExecInspect(ctx, execResp.ID)
-	if err != nil {
-		return -1, fmt.Errorf("inspecting exec: %w", err)
+
+	return waitForExecResult(ctx, func(ctx context.Context) (execInspectResult, error) {
+		resp, err := d.client.ContainerExecInspect(ctx, execResp.ID)
+		if err != nil {
+			return execInspectResult{}, fmt.Errorf("inspecting exec: %w", err)
+		}
+		return execInspectResult{Running: resp.Running, ExitCode: int64(resp.ExitCode)}, nil
+	}, 100*time.Millisecond)
+}
+
+type execInspectResult struct {
+	Running  bool
+	ExitCode int64
+}
+
+func waitForExecResult(ctx context.Context, inspect func(context.Context) (execInspectResult, error), interval time.Duration) (int64, error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return -1, fmt.Errorf("waiting for exec completion: %w", ctx.Err())
+		default:
+		}
+
+		result, err := inspect(ctx)
+		if err != nil {
+			return -1, err
+		}
+		if !result.Running {
+			return result.ExitCode, nil
+		}
+
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return -1, fmt.Errorf("waiting for exec completion: %w", ctx.Err())
+		case <-timer.C:
+		}
 	}
-	return int64(resp.ExitCode), nil
 }
 
 func (d *dockerRuntime) CopyToContainer(ctx context.Context, id, dstPath string, content io.Reader) error {
@@ -216,11 +267,22 @@ func (d *dockerRuntime) ImagePull(ctx context.Context, ref string, out io.Writer
 	if err != nil {
 		return fmt.Errorf("pulling image %s: %w", ref, err)
 	}
-	defer resp.Close()
-	if out != nil {
-		_, _ = io.Copy(out, resp)
-	} else {
-		_, _ = io.Copy(io.Discard, resp)
+	if err := drainImagePullStream(resp, out); err != nil {
+		return fmt.Errorf("reading image pull stream for %s: %w", ref, err)
+	}
+	return nil
+}
+
+func drainImagePullStream(resp io.ReadCloser, out io.Writer) error {
+	if out == nil {
+		out = io.Discard
+	}
+	if _, err := io.Copy(out, resp); err != nil {
+		_ = resp.Close()
+		return fmt.Errorf("copying image pull stream: %w", err)
+	}
+	if err := resp.Close(); err != nil {
+		return fmt.Errorf("closing image pull stream: %w", err)
 	}
 	return nil
 }

@@ -61,6 +61,8 @@ type ContainerRuntime interface {
 	ContainerWait(ctx context.Context, id string) (int64, error)
 	ContainerRemove(ctx context.Context, id string, force bool) error
 	ContainerAttach(ctx context.Context, id string) (io.ReadWriteCloser, error)
+	ContainerResize(ctx context.Context, id string, height, width uint) error
+	ContainerSignal(ctx context.Context, id, signal string) error
 	ContainerExec(ctx context.Context, id string, cmd []string) (int64, error)
 
 	// Data transfer — streaming tar, no temp files

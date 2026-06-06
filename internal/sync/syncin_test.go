@@ -4,7 +4,10 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/r-dson/abox/internal/runtime"
@@ -43,14 +46,20 @@ func TestSyncIn_StreamsTarToContainer(t *testing.T) {
 	}
 }
 
-func TestSyncIn_UsesAtomicRename(t *testing.T) {
+func TestSyncIn_ReplacesContentsFromStagingDirectory(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, dir+"/file.txt", []byte("data"), 0o644)
 
 	var execCmds [][]string
 	stub := &runtime.StubRuntime{
+		CopyToContainerFn: func(_ context.Context, _, _ string, content io.Reader) error {
+			if _, err := io.Copy(io.Discard, content); err != nil {
+				return fmt.Errorf("draining tar content: %w", err)
+			}
+			return nil
+		},
 		ContainerExecFn: func(_ context.Context, _ string, cmd []string) (int64, error) {
-			execCmds = append(execCmds, cmd)
+			execCmds = append(execCmds, append([]string(nil), cmd...))
 			return 0, nil
 		},
 	}
@@ -60,17 +69,50 @@ func TestSyncIn_UsesAtomicRename(t *testing.T) {
 		t.Fatalf("SyncIn() error: %v", err)
 	}
 
-	if len(execCmds) != 1 {
-		t.Fatalf("expected 1 exec call, got %d", len(execCmds))
+	if len(execCmds) != 2 {
+		t.Fatalf("expected 2 exec calls, got %d", len(execCmds))
 	}
-	want := []string{"mv", "-T", "/workspace.abx-tmp", "/workspace"}
-	if len(execCmds[0]) != len(want) {
-		t.Fatalf("exec cmd = %v, want %v", execCmds[0], want)
+	want := []string{"sh", "-c", fmt.Sprintf("find /workspace -mindepth 1 -maxdepth 1 ! -name .abx-tmp -exec rm -rf {} + && cp -a /workspace/.abx-tmp/. /workspace/ && rm -rf /workspace/.abx-tmp && chown -R %d:%d /workspace", os.Getuid(), os.Getgid())}
+	if len(execCmds[1]) != len(want) {
+		t.Fatalf("exec cmd = %v, want %v", execCmds[1], want)
 	}
-	for i, v := range execCmds[0] {
+	for i, v := range execCmds[1] {
 		if v != want[i] {
 			t.Errorf("exec[%d] = %q, want %q", i, v, want[i])
 		}
+	}
+}
+
+func TestSyncIn_ChownsDestinationForEditorUser(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, dir+"/file.txt", []byte("data"), 0o644)
+
+	var execCmds [][]string
+	stub := &runtime.StubRuntime{
+		CopyToContainerFn: func(_ context.Context, _, _ string, content io.Reader) error {
+			if _, err := io.Copy(io.Discard, content); err != nil {
+				return fmt.Errorf("draining tar content: %w", err)
+			}
+			return nil
+		},
+		ContainerExecFn: func(_ context.Context, _ string, cmd []string) (int64, error) {
+			execCmds = append(execCmds, append([]string(nil), cmd...))
+			return 0, nil
+		},
+	}
+
+	if err := syncpkg.In(t.Context(), stub, dir, "test-vol", "/workspace", nil); err != nil {
+		t.Fatalf("SyncIn() error: %v", err)
+	}
+
+	if len(execCmds) != 2 {
+		t.Fatalf("expected 2 exec calls, got %d", len(execCmds))
+	}
+	if !strings.Contains(execCmds[1][2], "chown -R ") {
+		t.Fatalf("replace command should chown destination, got %q", execCmds[1][2])
+	}
+	if !strings.Contains(execCmds[1][2], " /workspace") {
+		t.Fatalf("replace command should chown workspace, got %q", execCmds[1][2])
 	}
 }
 
@@ -80,8 +122,11 @@ func TestSyncIn_StreamsToStagingPath(t *testing.T) {
 
 	var capturedDst string
 	stub := &runtime.StubRuntime{
-		CopyToContainerFn: func(_ context.Context, _, dst string, _ io.Reader) error {
+		CopyToContainerFn: func(_ context.Context, _, dst string, content io.Reader) error {
 			capturedDst = dst
+			if _, err := io.Copy(io.Discard, content); err != nil {
+				return fmt.Errorf("draining tar content: %w", err)
+			}
 			return nil
 		},
 	}
@@ -91,7 +136,7 @@ func TestSyncIn_StreamsToStagingPath(t *testing.T) {
 		t.Fatalf("SyncIn() error: %v", err)
 	}
 
-	if capturedDst != "/project.abx-tmp" {
-		t.Errorf("CopyToContainer dst = %q, want %q", capturedDst, "/project.abx-tmp")
+	if capturedDst != "/project/.abx-tmp" {
+		t.Errorf("CopyToContainer dst = %q, want %q", capturedDst, "/project/.abx-tmp")
 	}
 }

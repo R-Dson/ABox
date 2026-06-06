@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/r-dson/abox/internal/config"
@@ -52,22 +53,23 @@ func TestEditorRegistry_FieldsCorrect(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		editor     string
-		imageTag   string
-		cmdName    string
-		configPath string
-		envVars    []string
-		legacy     string
+		name         string
+		editor       string
+		imageTag     string
+		cmdName      string
+		configPath   string
+		envVars      []string
+		legacy       string
+		configIsFile bool
 	}{
-		{"claude fields", "claude", "ghcr.io/r-dson/abox:claude", "claude", ".claude", []string{"ANTHROPIC_API_KEY"}, ""},
-		{"opencode fields", "opencode", "ghcr.io/r-dson/abox:opencode", "opencode", ".config/opencode", []string{}, ".opencode"},
-		{"aider fields", "aider", "ghcr.io/r-dson/abox:aider", "aider", ".aider.conf.yml", []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY"}, ""},
-		{"codex fields", "codex", "ghcr.io/r-dson/abox:codex", "codex", ".codex", []string{}, ""},
-		{"copilot fields", "copilot", "ghcr.io/r-dson/abox:copilot", "copilot", ".copilot", []string{"GITHUB_TOKEN"}, ""},
-		{"gemini fields", "gemini", "ghcr.io/r-dson/abox:gemini", "gemini", ".gemini", []string{"GOOGLE_API_KEY"}, ""},
-		{"goose fields", "goose", "ghcr.io/r-dson/abox:goose", "goose", ".config/goose", []string{}, ""},
-		{"vibe fields", "vibe", "ghcr.io/r-dson/abox:vibe", "vibe", ".vibe", []string{}, ""},
+		{"claude fields", "claude", "ghcr.io/r-dson/abox:claude", "claude", ".claude", []string{"ANTHROPIC_API_KEY"}, "", false},
+		{"opencode fields", "opencode", "ghcr.io/r-dson/abox:opencode", "opencode", ".config/opencode", []string{}, ".opencode", false},
+		{"aider fields", "aider", "ghcr.io/r-dson/abox:aider", "aider", ".aider.conf.yml", []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY"}, "", true},
+		{"codex fields", "codex", "ghcr.io/r-dson/abox:codex", "codex", ".codex", []string{}, "", false},
+		{"copilot fields", "copilot", "ghcr.io/r-dson/abox:copilot", "copilot", ".copilot", []string{"GITHUB_TOKEN"}, "", false},
+		{"gemini fields", "gemini", "ghcr.io/r-dson/abox:gemini", "gemini", ".gemini", []string{"GOOGLE_API_KEY"}, "", false},
+		{"goose fields", "goose", "ghcr.io/r-dson/abox:goose", "goose", ".config/goose", []string{}, "", false},
+		{"vibe fields", "vibe", "ghcr.io/r-dson/abox:vibe", "vibe", ".vibe", []string{}, "", false},
 	}
 
 	for _, tt := range tests {
@@ -97,19 +99,22 @@ func TestEditorRegistry_FieldsCorrect(t *testing.T) {
 			if p.LegacyPath != tt.legacy {
 				t.Errorf("LegacyPath = %q, want %q", p.LegacyPath, tt.legacy)
 			}
+			if p.ConfigIsFile != tt.configIsFile {
+				t.Errorf("ConfigIsFile = %v, want %v", p.ConfigIsFile, tt.configIsFile)
+			}
 		})
 	}
 }
 
-func TestEditorRegistry_UnknownEditorFallsBackToOpencode(t *testing.T) {
+func TestEditorRegistry_UnknownEditorReturnsError(t *testing.T) {
 	registry, _ := config.LoadEditorRegistry()
 
-	p, err := registry.Get("nonexistent")
-	if err != nil {
-		t.Fatalf("Get(nonexistent) error: %v", err)
+	_, err := registry.Get("nonexistent")
+	if err == nil {
+		t.Fatal("Get(nonexistent) expected error")
 	}
-	if p.CmdName != "opencode" {
-		t.Errorf("Unknown editor fell back to %q, want opencode", p.CmdName)
+	if got := err.Error(); !strings.Contains(got, "unknown editor") || !strings.Contains(got, "opencode") {
+		t.Errorf("error = %q, want unknown editor with available editors", got)
 	}
 }
 
@@ -168,9 +173,10 @@ func TestLoad_Defaults(t *testing.T) {
 		want any
 	}{
 		{"default editor", cfg.Editor, "opencode"},
-		{"default pull policy", cfg.PullPolicy, "missing"},
+		{"default pull policy", cfg.PullPolicy, "never"},
 		{"default memory limit", cfg.MemoryLimit, "4g"},
 		{"default cpu limit", cfg.CPULimit, 2.0},
+		{"default SSH agent forwarding", cfg.ForwardSSHAgent, false},
 	}
 
 	for _, tt := range tests {
@@ -189,7 +195,7 @@ func TestLoad_ReadsJSONConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	configFile := filepath.Join(configDir, "config.json")
-	content := `{"editor":"claude","exclude_url":"https://example.com/ignore","verbose":true}`
+	content := `{"editor":"claude","exclude_url":"https://example.com/ignore","verbose":true,"forward_ssh_agent":true}`
 	if err := os.WriteFile(configFile, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -209,6 +215,7 @@ func TestLoad_ReadsJSONConfig(t *testing.T) {
 		{"editor from config", cfg.Editor, "claude"},
 		{"exclude_url from config", cfg.ExcludeURL, "https://example.com/ignore"},
 		{"verbose from config", cfg.Verbose, true},
+		{"forward SSH agent from config", cfg.ForwardSSHAgent, true},
 	}
 
 	for _, tt := range tests {
