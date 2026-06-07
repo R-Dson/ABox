@@ -129,6 +129,49 @@ func TestBuildSpec_EditorDataMountTargets(t *testing.T) {
 	}
 }
 
+func TestBuildSpec_SanitizedGitConfigWhenEnabled(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[credential]\n\thelper = store\n[user]\n\tname = Real\n\temail = real@example.com\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{ForwardGitConfig: true})
+
+	// Must not mount the raw host .gitconfig
+	for _, bind := range spec.Binds {
+		if strings.Contains(bind, filepath.Join(home, ".gitconfig")) {
+			t.Fatalf("raw host .gitconfig must not be mounted: %q", bind)
+		}
+	}
+
+	// Must include a sanitized gitconfig bind to the container home
+	found := false
+	for _, bind := range spec.Binds {
+		if strings.Contains(bind, ":/home/agent/.gitconfig") {
+			found = true
+			// Extract host-side path and verify contents
+			hostPath := strings.SplitN(bind, ":", 2)[0]
+			data, err := os.ReadFile(hostPath)
+			if err != nil {
+				t.Fatalf("reading sanitized gitconfig: %v", err)
+			}
+			content := string(data)
+			if strings.Contains(content, "credential") {
+				t.Fatal("sanitized gitconfig must not contain credential helper")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing sanitized .gitconfig bind in %v", spec.Binds)
+	}
+}
+
 func TestBuildSpec_GitconfigNotMountedByDefault(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -354,8 +397,45 @@ func TestSeccompProfileIsValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cannot read seccomp profile at %s: %v", path, err)
 	}
-	if len(data) == 0 {
-		t.Error("seccomp profile is empty")
+	if !json.Valid(data) {
+		t.Fatal("seccomp profile is not valid JSON")
+	}
+}
+
+func TestBuildSpec_ImmutabilityCopiesSlices(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{
+		ConfigVol: "c",
+		CacheVol:  "cache",
+		StateVol:  "state",
+		ShareVol:  "share",
+	})
+
+	spec := mustBuildSpec(t, profile, sess, "/workspace", &config.Config{})
+
+	// Mutate returned slices and verify the second call returns unmodified values.
+	spec.CapDrop[0] = "MUTATED"
+	spec.CapAdd[0] = "MUTATED"
+	spec.SecurityOpt[0] = "MUTATED"
+	spec.Binds[0] = "MUTATED"
+	spec.Env[0] = "MUTATED"
+
+	spec2 := mustBuildSpec(t, profile, sess, "/workspace", &config.Config{})
+	if spec2.CapDrop[0] == "MUTATED" {
+		t.Fatal("CapDrop slice was shared across calls")
+	}
+	if spec2.CapAdd[0] == "MUTATED" {
+		t.Fatal("CapAdd slice was shared across calls")
+	}
+	if spec2.SecurityOpt[0] == "MUTATED" {
+		t.Fatal("SecurityOpt slice was shared across calls")
+	}
+	if spec2.Binds[0] == "MUTATED" {
+		t.Fatal("Binds slice was shared across calls")
+	}
+	if spec2.Env[0] == "MUTATED" {
+		t.Fatal("Env slice was shared across calls")
 	}
 }
 

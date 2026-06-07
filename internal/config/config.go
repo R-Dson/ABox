@@ -18,6 +18,7 @@ type Config struct {
 	MemoryLimit       string  `mapstructure:"memory_limit" json:"memory_limit"`
 	CPULimit          float64 `mapstructure:"cpu_limit" json:"cpu_limit"`
 	ForwardSSHAgent   bool    `mapstructure:"forward_ssh_agent" json:"forward_ssh_agent"`
+	ForwardGitConfig  bool    `mapstructure:"forward_git_config" json:"forward_git_config"`
 	TrustWorkspaceEnv bool    `mapstructure:"trust_workspace_env" json:"trust_workspace_env"`
 	Verbose           bool    `mapstructure:"verbose" json:"verbose"`
 	JSONLogs          bool    `mapstructure:"json_logs" json:"json_logs"`

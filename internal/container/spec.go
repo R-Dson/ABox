@@ -1,9 +1,12 @@
 package container
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/docker/go-units"
@@ -22,24 +25,26 @@ const (
 
 // seccompPath materializes the embedded seccomp profile to a temp file.
 // The Docker API requires a filesystem path, not inline JSON.
-// Validates the JSON after writing to prevent corruption.
+// Validates the JSON before writing to prevent corruption.
 var seccompPath = sync.OnceValues(func() (string, error) {
+	if !json.Valid(seccompprofile.ABoxDefault) {
+		return "", fmt.Errorf("embedded seccomp profile is not valid JSON")
+	}
+
 	f, err := os.CreateTemp("", "abox-seccomp-*.json")
 	if err != nil {
 		return "", fmt.Errorf("creating seccomp temp file: %w", err)
 	}
-	defer f.Close()
+
+	path := f.Name()
 	if _, err := f.Write(seccompprofile.ABoxDefault); err != nil {
+		f.Close()
 		return "", fmt.Errorf("writing seccomp profile: %w", err)
 	}
-	info, err := f.Stat()
-	if err != nil {
-		return "", fmt.Errorf("checking seccomp profile: %w", err)
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("closing seccomp temp file: %w", err)
 	}
-	if info.Size() == 0 {
-		return "", fmt.Errorf("seccomp profile is empty")
-	}
-	return f.Name(), nil
+	return path, nil
 })
 
 // SeccompProfilePath returns the path to the materialized seccomp profile.
@@ -80,7 +85,7 @@ func BuildSpec(profile config.EditorProfile, sess *Session, workdir string, cfg 
 		spec.NanoCPUs = int64(cfg.CPULimit * 1e9)
 	}
 
-	spec.Binds = buildBinds(profile, sess, workdir, cfg.ForwardSSHAgent)
+	spec.Binds = buildBinds(profile, sess, workdir, cfg)
 	spec.NetworkMode = ResolveNetworkMode(sess, cfg)
 	return spec, nil
 }
@@ -124,7 +129,7 @@ func buildEnv(profile config.EditorProfile, shouldForwardSSHAgent bool) []string
 	return env
 }
 
-func buildBinds(profile config.EditorProfile, sess *Session, workdir string, shouldForwardSSHAgent bool) []string {
+func buildBinds(profile config.EditorProfile, sess *Session, workdir string, cfg *config.Config) []string {
 	configMountPath := profile.ConfigFullPath(containerHomeDir)
 	if profile.ConfigIsFile {
 		configMountPath = fileConfigVolumePath
@@ -147,13 +152,78 @@ func buildBinds(profile config.EditorProfile, sess *Session, workdir string, sho
 		binds = append(binds, workdir+":"+containerWorkDir)
 	}
 
-	if shouldForwardSSHAgent {
+	if cfg.ForwardSSHAgent {
 		if sock := sshAgentSocket(); sock != "" {
 			binds = append(binds, sock+":/tmp/ssh-agent.sock:ro")
 		}
 	}
+	if cfg.ForwardGitConfig {
+		if path, err := sanitizedGitConfig(); err == nil {
+			binds = append(binds, path+":"+filepath.Join(containerHomeDir, ".gitconfig")+":ro")
+		}
+	}
 
 	return binds
+}
+
+func sanitizedGitConfig() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolving home directory: %w", err)
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".gitconfig"))
+	if err != nil {
+		return "", fmt.Errorf("reading host gitconfig: %w", err)
+	}
+
+	content := sanitizeGitConfig(data)
+	f, err := os.CreateTemp("", "abox-gitconfig-*")
+	if err != nil {
+		return "", fmt.Errorf("creating sanitized gitconfig: %w", err)
+	}
+	path := f.Name()
+	if _, err := f.WriteString(content); err != nil {
+		f.Close()
+		return "", fmt.Errorf("writing sanitized gitconfig: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("closing sanitized gitconfig: %w", err)
+	}
+	return path, nil
+}
+
+func sanitizeGitConfig(data []byte) string {
+	var b strings.Builder
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	inUserSection := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			inUserSection = trimmed == "[user]"
+			if inUserSection {
+				b.WriteString("[user]\n")
+			}
+			continue
+		}
+		if !inUserSection {
+			continue
+		}
+		key, value, ok := strings.Cut(trimmed, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if key != "name" && key != "email" {
+			continue
+		}
+		b.WriteString("\t")
+		b.WriteString(key)
+		b.WriteString(" = ")
+		b.WriteString(strings.TrimSpace(value))
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 func sshAgentSocket() string {
