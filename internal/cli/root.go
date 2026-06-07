@@ -13,37 +13,48 @@ import (
 	"github.com/spf13/viper"
 )
 
+var (
+	loadUserConfigFunc = loadUserConfig
+	detectRuntimeFunc  = runtime.Detect
+	runSessionFunc     = RunSession
+)
+
 // NewRootCmd creates the root command for abx.
 // The root command IS the run command — `abx [flags] [dir]` runs an editor.
 // Subcommands (audit, config, version, completion) are registered separately.
 func NewRootCmd(version string) *cobra.Command {
+	var loadedConfig *config.Config
 	root := &cobra.Command{
-		Use:           "abx [flags] [directory]",
+		Use:           "abx [flags] [directory] [editor args...]",
 		Short:         "Secure sandbox for AI coding editors",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args:          cobra.MaximumNArgs(1),
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			loadedConfig, err := loadUserConfig()
+		Args:          cobra.ArbitraryArgs,
+	}
+	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		verbose := false
+		jsonLogs := false
+		if cmd == root {
+			var err error
+			loadedConfig, err = loadUserConfigFunc()
 			if err != nil {
 				return err
 			}
+			verbose = loadedConfig.Verbose
+			jsonLogs = loadedConfig.JSONLogs
+		}
 
-			verbose := loadedConfig.Verbose
-			if cmd.Flags().Changed("verbose") {
-				verbose, _ = cmd.Flags().GetBool("verbose")
-			}
+		if cmd.Flags().Changed("verbose") {
+			verbose, _ = cmd.Flags().GetBool("verbose")
+		}
+		if cmd.Flags().Changed("json-logs") {
+			jsonLogs, _ = cmd.Flags().GetBool("json-logs")
+		}
 
-			jsonLogs := loadedConfig.JSONLogs
-			if cmd.Flags().Changed("json-logs") {
-				jsonLogs, _ = cmd.Flags().GetBool("json-logs")
-			}
-
-			if err := logging.Setup(verbose, jsonLogs); err != nil {
-				return fmt.Errorf("setting up logging: %w", err)
-			}
-			return nil
-		},
+		if err := logging.Setup(verbose, jsonLogs); err != nil {
+			return fmt.Errorf("setting up logging: %w", err)
+		}
+		return nil
 	}
 
 	root.PersistentFlags().Bool("verbose", false, "enable debug logging to ~/.local/state/abx/abx.log")
@@ -65,30 +76,30 @@ func NewRootCmd(version string) *cobra.Command {
 
 	// Run logic on root
 	root.RunE = func(cmd *cobra.Command, args []string) error {
-		workdir := "."
-		if len(args) > 0 {
-			workdir = args[0]
-		}
+		workdir, editorArgs := parseRunArgs(args)
 		absWorkdir, err := resolveWorkdir(workdir)
 		if err != nil {
 			return err
 		}
-		loadedConfig, err := loadUserConfig()
-		if err != nil {
-			return err
+		if loadedConfig == nil {
+			loadedConfig, err = loadUserConfigFunc()
+			if err != nil {
+				return err
+			}
 		}
 		applyLoadedConfig(cmd, cfg, loadedConfig)
+		cfg.EditorArgs = append([]string(nil), editorArgs...)
 
 		dotEnv, err := LoadDotEnv(absWorkdir, cfg.TrustWorkspaceEnv)
 		if err != nil {
 			return err
 		}
 		cfg.ExtraEnv = append(cfg.ExtraEnv, dotEnv...)
-		rt, err := runtime.Detect(cmd.Context())
+		rt, err := detectRuntimeFunc(cmd.Context())
 		if err != nil {
 			return err
 		}
-		return RunSession(cmd.Context(), rt, absWorkdir, cfg)
+		return runSessionFunc(cmd.Context(), rt, absWorkdir, cfg)
 	}
 
 	root.AddCommand(
@@ -99,6 +110,16 @@ func NewRootCmd(version string) *cobra.Command {
 	)
 
 	return root
+}
+
+func parseRunArgs(args []string) (string, []string) {
+	if len(args) == 0 {
+		return ".", nil
+	}
+	if strings.HasPrefix(args[0], "-") {
+		return ".", append([]string(nil), args...)
+	}
+	return args[0], append([]string(nil), args[1:]...)
 }
 
 func resolveWorkdir(workdir string) (string, error) {

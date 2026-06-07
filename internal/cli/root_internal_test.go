@@ -1,13 +1,95 @@
 package cli
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/r-dson/abox/internal/config"
+	"github.com/r-dson/abox/internal/runtime"
+	"github.com/r-dson/abox/internal/runtimetest"
 	"github.com/spf13/cobra"
 )
+
+func TestRoot_AllowsDirectoryAndEditorArgsAfterSeparator(t *testing.T) {
+	dir := t.TempDir()
+	gotWorkdir, gotEditorArgs := executeRootWithRunCapture(t, []string{dir, "--", "--model", "x"})
+
+	if gotWorkdir != dir {
+		t.Fatalf("workdir = %q, want %q", gotWorkdir, dir)
+	}
+	if want := []string{"--model", "x"}; !equalStringSlices(gotEditorArgs, want) {
+		t.Fatalf("EditorArgs = %v, want %v", gotEditorArgs, want)
+	}
+}
+
+func TestRoot_AllowsDirectoryThenEditorArgs(t *testing.T) {
+	dir := t.TempDir()
+	gotWorkdir, gotEditorArgs := executeRootWithRunCapture(t, []string{dir, "prompt.txt"})
+
+	if gotWorkdir != dir {
+		t.Fatalf("workdir = %q, want %q", gotWorkdir, dir)
+	}
+	if want := []string{"prompt.txt"}; !equalStringSlices(gotEditorArgs, want) {
+		t.Fatalf("EditorArgs = %v, want %v", gotEditorArgs, want)
+	}
+}
+
+func TestRoot_InfoSubcommandsSkipUserConfigLoad(t *testing.T) {
+	configHome := t.TempDir()
+	dir := filepath.Join(configHome, "abx")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	root := NewRootCmd("test")
+	root.SetArgs([]string{"version"})
+	root.SetOut(new(bytes.Buffer))
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("version error = %v, want nil", err)
+	}
+}
+
+func TestRoot_LoadsUserConfigOnceForRun(t *testing.T) {
+	dir := t.TempDir()
+	loadCount := 0
+	oldLoad := loadUserConfigFunc
+	oldDetect := detectRuntimeFunc
+	oldRun := runSessionFunc
+	loadUserConfigFunc = func() (*config.Config, error) {
+		loadCount++
+		return &config.Config{Editor: "opencode", PullPolicy: pullPolicyNever}, nil
+	}
+	detectRuntimeFunc = func(context.Context) (runtime.ContainerRuntime, error) {
+		return &runtimetest.StubRuntime{}, nil
+	}
+	runSessionFunc = func(context.Context, runtime.ContainerRuntime, string, *SessionConfig) error {
+		return nil
+	}
+	defer func() {
+		loadUserConfigFunc = oldLoad
+		detectRuntimeFunc = oldDetect
+		runSessionFunc = oldRun
+	}()
+
+	root := NewRootCmd("test")
+	root.SetArgs([]string{dir})
+	root.SetOut(new(bytes.Buffer))
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("root run error = %v", err)
+	}
+	if loadCount != 1 {
+		t.Fatalf("loadUserConfig calls = %d, want 1", loadCount)
+	}
+}
 
 func TestApplyLoadedConfigDefaults(t *testing.T) {
 	cmd, cfg := testConfigCommand()
@@ -96,6 +178,51 @@ func TestResolveWorkdirReturnsCanonicalPath(t *testing.T) {
 	if got != realDir {
 		t.Fatalf("resolveWorkdir() = %q, want %q", got, realDir)
 	}
+}
+
+func executeRootWithRunCapture(t *testing.T, args []string) (string, []string) {
+	t.Helper()
+	oldLoad := loadUserConfigFunc
+	oldDetect := detectRuntimeFunc
+	oldRun := runSessionFunc
+	loadUserConfigFunc = func() (*config.Config, error) {
+		return &config.Config{Editor: "opencode", PullPolicy: pullPolicyNever}, nil
+	}
+	detectRuntimeFunc = func(context.Context) (runtime.ContainerRuntime, error) {
+		return &runtimetest.StubRuntime{}, nil
+	}
+	var gotWorkdir string
+	var gotEditorArgs []string
+	runSessionFunc = func(_ context.Context, _ runtime.ContainerRuntime, workdir string, cfg *SessionConfig) error {
+		gotWorkdir = workdir
+		gotEditorArgs = append([]string(nil), cfg.EditorArgs...)
+		return nil
+	}
+	defer func() {
+		loadUserConfigFunc = oldLoad
+		detectRuntimeFunc = oldDetect
+		runSessionFunc = oldRun
+	}()
+
+	root := NewRootCmd("test")
+	root.SetArgs(args)
+	root.SetOut(new(bytes.Buffer))
+	if err := root.Execute(); err != nil {
+		t.Fatalf("root execute error: %v", err)
+	}
+	return gotWorkdir, gotEditorArgs
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func testConfigCommand() (*cobra.Command, *SessionConfig) {
