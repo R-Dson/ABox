@@ -399,9 +399,15 @@ func newCallRecorder() *callRecorder {
 			r.add("ContainerExec")
 			return 0, nil
 		},
-		CopyToContainerFn: func(_ context.Context, _, _ string, _ io.Reader) error {
+		CopyToContainerFn: func(_ context.Context, _, _ string, content io.Reader) error {
 			r.add("CopyToContainer")
-			return r.shouldFail("CopyToContainer")
+			if err := r.shouldFail("CopyToContainer"); err != nil {
+				return err
+			}
+			if _, err := io.Copy(io.Discard, content); err != nil {
+				return fmt.Errorf("draining copy-to-container content: %w", err)
+			}
+			return nil
 		},
 		CopyFromContainerFn: func(_ context.Context, id, _ string) (io.ReadCloser, error) {
 			r.add("CopyFromContainer")

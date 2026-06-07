@@ -42,16 +42,27 @@ func In(ctx context.Context, rt runtime.ContainerRuntime, srcDir, volumeName, ds
 
 	// Stream tar via pipe; CloseWithError propagates tar errors to the reader side.
 	pr, pw := io.Pipe()
+	tarDone := make(chan error, 1)
 	go func() {
 		if err := TarFiltered(srcDir, pw, matcher); err != nil {
-			pw.CloseWithError(err)
+			_ = pw.CloseWithError(err)
+			tarDone <- err
 			return
 		}
-		pw.Close()
+		if err := pw.Close(); err != nil {
+			tarDone <- fmt.Errorf("closing tar pipe writer: %w", err)
+			return
+		}
+		tarDone <- nil
 	}()
 
 	if err := rt.CopyToContainer(ctx, containerID, stagingPath, pr); err != nil {
+		_ = pr.CloseWithError(err)
+		<-tarDone
 		return fmt.Errorf("streaming %s to volume: %w", srcDir, err)
+	}
+	if err := <-tarDone; err != nil {
+		return fmt.Errorf("creating tar stream for %s: %w", srcDir, err)
 	}
 
 	replaceCmd := fmt.Sprintf("find %[1]s -mindepth 1 -maxdepth 1 ! -name .abx-tmp -exec rm -rf {} + && cp -a %[2]s/. %[1]s/ && rm -rf %[2]s && touch %[1]s/%[5]s && chown -R %[3]d:%[4]d %[1]s", dstPath, stagingPath, os.Getuid(), os.Getgid(), volumeInitializedMarker)

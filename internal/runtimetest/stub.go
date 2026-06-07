@@ -3,6 +3,7 @@ package runtimetest
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/r-dson/abox/internal/runtime"
@@ -115,6 +116,9 @@ func (s *StubRuntime) ContainerExec(ctx context.Context, id string, cmd []string
 func (s *StubRuntime) CopyToContainer(ctx context.Context, id, dstPath string, content io.Reader) error {
 	if s.CopyToContainerFn != nil {
 		return s.CopyToContainerFn(ctx, id, dstPath, content)
+	}
+	if _, err := io.Copy(io.Discard, content); err != nil {
+		return fmt.Errorf("draining copy-to-container content: %w", err)
 	}
 	return nil
 }

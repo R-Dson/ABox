@@ -2,6 +2,7 @@ package sync_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/r-dson/abox/internal/runtime"
 	"github.com/r-dson/abox/internal/runtimetest"
@@ -56,6 +58,42 @@ func TestSyncIn(t *testing.T) {
 		if !slices.Contains(spec.CapAdd, want) {
 			t.Fatalf("sync container CapAdd = %v, want %s", spec.CapAdd, want)
 		}
+	}
+}
+
+func TestSyncIn_CopyToContainerFailureUnblocksTarGoroutine(t *testing.T) {
+	srcDir := t.TempDir()
+	mustWriteFile(t, filepath.Join(srcDir, "file.txt"), []byte(strings.Repeat("x", 1024)), 0o644)
+
+	var tarReader io.Reader
+	stub := &runtimetest.StubRuntime{
+		CopyToContainerFn: func(_ context.Context, _ string, _ string, content io.Reader) error {
+			tarReader = content
+			return errors.New("copy failed")
+		},
+	}
+
+	err := syncpkg.In(t.Context(), stub, srcDir, "test-vol", "/data", nil)
+	if err == nil || !strings.Contains(err.Error(), "copy failed") {
+		t.Fatalf("In() error = %v, want copy failed", err)
+	}
+	if tarReader == nil {
+		t.Fatal("CopyToContainer was not called")
+	}
+
+	readDone := make(chan error, 1)
+	go func() {
+		_, err := tarReader.Read(make([]byte, 1))
+		readDone <- err
+	}()
+
+	select {
+	case err := <-readDone:
+		if err == nil {
+			t.Fatal("reader read succeeded after copy failure, want closed pipe error")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("tar reader remained blocked after CopyToContainer failure")
 	}
 }
 
