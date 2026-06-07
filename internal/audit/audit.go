@@ -38,9 +38,11 @@ func Run(_ context.Context, workdir string) (*Result, error) {
 		Status: CheckWorkdirSafety(workdir),
 	})
 
+	sensitiveStatus, sensitivePath := checkSensitiveFiles(workdir)
 	result.Checks = append(result.Checks, Check{
 		Name:   "sensitive_files",
-		Status: CheckSensitiveFiles(workdir),
+		Status: sensitiveStatus,
+		Detail: sensitivePath,
 	})
 
 	return result, nil
@@ -65,10 +67,16 @@ func CheckWorkdirSafety(workdir string) Status {
 
 // CheckSensitiveFiles returns Warn if known sensitive files exist in workdir.
 func CheckSensitiveFiles(workdir string) Status {
+	status, _ := checkSensitiveFiles(workdir)
+	return status
+}
+
+func checkSensitiveFiles(workdir string) (Status, string) {
 	for _, name := range sensitiveWorkspacePaths {
-		if _, err := os.Stat(filepath.Join(workdir, name)); err == nil {
-			return Warn
+		path := filepath.Join(workdir, name)
+		if _, err := os.Stat(path); err == nil {
+			return Warn, path
 		}
 	}
-	return Pass
+	return Pass, ""
 }

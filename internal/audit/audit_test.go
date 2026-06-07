@@ -67,6 +67,28 @@ func TestCheckWorkdirSafety(t *testing.T) {
 	}
 }
 
+func TestAuditDetailsIncludePath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	if err := os.WriteFile(path, []byte("SECRET=123"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := audit.Run(t.Context(), dir)
+	if err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	for _, check := range result.Checks {
+		if check.Name == "sensitive_files" {
+			if check.Detail != path {
+				t.Fatalf("sensitive detail = %q, want %q", check.Detail, path)
+			}
+			return
+		}
+	}
+	t.Fatal("missing sensitive_files check")
+}
+
 func TestCheckSensitiveFiles(t *testing.T) {
 	dir := t.TempDir()
 
