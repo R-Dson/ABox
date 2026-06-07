@@ -370,6 +370,7 @@ func watchTerminalResize(ctx context.Context, rt runtime.ContainerRuntime, id st
 	signal.Notify(signals, syscall.SIGWINCH)
 
 	go func() {
+		defer signal.Stop(signals)
 		for {
 			select {
 			case <-ctx.Done():
@@ -384,9 +385,12 @@ func watchTerminalResize(ctx context.Context, rt runtime.ContainerRuntime, id st
 		}
 	}()
 
+	var once sync.Once
 	return func() {
-		signal.Stop(signals)
-		close(done)
+		once.Do(func() {
+			signal.Stop(signals)
+			close(done)
+		})
 	}
 }
 

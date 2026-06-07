@@ -94,6 +94,16 @@ func TestForwardContainerSignal(t *testing.T) {
 	}
 }
 
+func TestWatchTerminalResize_StopsSignalsOnContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	stop := watchTerminalResize(ctx, &runtimetest.StubRuntime{}, "c-1", func() (uint, uint, bool) {
+		return 0, 0, false
+	})
+	cancel()
+	stop()
+	stop()
+}
+
 func TestForwardContainerSignals_StopIsIdempotent(t *testing.T) {
 	stop := forwardContainerSignals(t.Context(), &runtimetest.StubRuntime{}, "c-1", make(chan os.Signal))
 	stop()
