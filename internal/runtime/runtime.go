@@ -38,6 +38,10 @@ type ContainerSpec struct {
 	NetworkMode string
 	// AutoRemove automatically removes the container on exit.
 	AutoRemove bool
+	// Init runs an init process as PID 1 inside the container.
+	Init bool
+	// PidsLimit bounds the number of processes in the container (0 = daemon default).
+	PidsLimit int64
 	// Memory is the memory limit in bytes (0 = unlimited).
 	Memory int64
 	// NanoCPUs is the CPU limit in nanocores (0 = unlimited).

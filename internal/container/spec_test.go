@@ -296,6 +296,21 @@ func TestBuildSpec_ImageFromProfile(t *testing.T) {
 	}
 }
 
+func TestBuildSpec_ResourceHardening(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/workspace", &config.Config{})
+
+	if !spec.Init {
+		t.Fatal("Init = false, want true")
+	}
+	if spec.PidsLimit <= 0 {
+		t.Fatalf("PidsLimit = %d, want bounded positive value", spec.PidsLimit)
+	}
+}
+
 func TestBuildSpec_NoNewPrivileges(t *testing.T) {
 	registry, _ := config.LoadEditorRegistry()
 	profile, _ := registry.Get("claude")

@@ -130,6 +130,12 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec)
 		SecurityOpt: securityOpt,
 		AutoRemove:  spec.AutoRemove,
 	}
+	if spec.Init {
+		hostConfig.Init = new(true)
+	}
+	if spec.PidsLimit > 0 {
+		hostConfig.PidsLimit = new(spec.PidsLimit)
+	}
 
 	if spec.NetworkMode != "" {
 		hostConfig.NetworkMode = dockercontainer.NetworkMode(spec.NetworkMode)

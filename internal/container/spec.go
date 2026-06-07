@@ -18,6 +18,7 @@ const (
 	containerWorkDir     = "/workspace"
 	fileConfigVolumePath = "/vol/config"
 	readOnlyBindFlags    = "ro,z"
+	defaultPidsLimit     = int64(512)
 )
 
 //go:embed testdata/seccomp.json
@@ -68,6 +69,8 @@ func BuildSpec(profile config.EditorProfile, sess *Session, workdir string, cfg 
 		CapAdd:      []string{"CHOWN", "SETUID", "SETGID"},
 		SecurityOpt: []string{"no-new-privileges", "seccomp=" + seccompProfilePath},
 		AutoRemove:  true,
+		Init:        true,
+		PidsLimit:   defaultPidsLimit,
 	}
 
 	if cfg.MemoryLimit != "" {
