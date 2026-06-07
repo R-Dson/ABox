@@ -285,8 +285,10 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 	if len(rootConflicts) > 0 {
 		return &ExitError{Code: nonZeroExitCode(exitCode)}
 	}
-
-	return &ExitError{Code: exitCode}
+	if exitCode != 0 {
+		return &ExitError{Code: exitCode}
+	}
+	return nil
 }
 
 // ValidateWorkdir rejects unsafe workspace paths.

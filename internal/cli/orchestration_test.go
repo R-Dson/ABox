@@ -17,7 +17,7 @@ import (
 	"github.com/r-dson/abox/internal/runtimetest"
 )
 
-func TestRunSession_CreatesAndCleansUp(t *testing.T) {
+func TestRunSession_ReturnsNilOnExitZero(t *testing.T) {
 	dir := t.TempDir()
 	rec := newCallRecorder()
 
@@ -25,12 +25,8 @@ func TestRunSession_CreatesAndCleansUp(t *testing.T) {
 		Editor: "opencode",
 	})
 
-	exitErr, ok := err.(*cli.ExitError)
-	if !ok {
-		t.Fatalf("expected ExitError, got %T: %v", err, err)
-	}
-	if exitErr.Code != 0 {
-		t.Errorf("exit code = %d, want 0", exitErr.Code)
+	if err != nil {
+		t.Fatalf("RunSession() error = %v, want nil", err)
 	}
 
 	calls := rec.methods()
