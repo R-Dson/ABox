@@ -107,7 +107,7 @@ func loadRemoteIgnore(ctx context.Context, excludeURL string) ([]string, error) 
 	if err != nil {
 		return nil, fmt.Errorf("fetching exclude URL: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("fetching exclude URL: unexpected status %s", response.Status)
 	}
@@ -139,7 +139,7 @@ func loadLocalIgnore(workdir string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening ignore file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	return readIgnorePatterns(f)
 }

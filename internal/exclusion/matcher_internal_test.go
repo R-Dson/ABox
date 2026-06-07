@@ -1,6 +1,22 @@
 package exclusion
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+)
+
+func TestReadOnlyCloseIgnoresAreExplicit(t *testing.T) {
+	data, err := os.ReadFile("matcher.go")
+	if err != nil {
+		t.Fatalf("reading matcher.go: %v", err)
+	}
+	for _, forbidden := range []string{"defer response.Body.Close()", "defer f.Close()"} {
+		if strings.Contains(string(data), forbidden) {
+			t.Fatalf("matcher.go contains %q; use explicit ignored-close closure", forbidden)
+		}
+	}
+}
 
 func TestMergePatternsDoesNotMutateBase(t *testing.T) {
 	base := make([]string, 1, 2)
