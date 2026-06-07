@@ -59,6 +59,7 @@ func NewRootCmd(version string) *cobra.Command {
 	root.Flags().BoolVar(&cfg.NoInternet, "no-internet", false, "disable networking entirely")
 	root.Flags().BoolVar(&cfg.ForceSync, "force-sync", false, "overwrite host files even if modified during session")
 	root.Flags().BoolVar(&cfg.ForwardSSHAgent, "ssh-agent", false, "forward the host SSH agent into the container")
+	root.Flags().BoolVar(&cfg.TrustWorkspaceEnv, "trust-workspace-env", false, "allow workspace .abxenv to request host environment variables")
 	root.Flags().StringVar(&cfg.ExcludeURL, "exclude-url", "", "fetch additional exclusion patterns from URL")
 	root.Flags().StringArrayVar(&cfg.ExtraEnv, "env", nil, "pass environment variable to container (repeatable)")
 
@@ -78,7 +79,7 @@ func NewRootCmd(version string) *cobra.Command {
 		}
 		applyLoadedConfig(cmd, cfg, loadedConfig)
 
-		dotEnv, err := LoadDotEnv(absWorkdir)
+		dotEnv, err := LoadDotEnv(absWorkdir, cfg.TrustWorkspaceEnv)
 		if err != nil {
 			return err
 		}
@@ -150,6 +151,9 @@ func applyLoadedConfig(cmd *cobra.Command, cfg *SessionConfig, loadedConfig *con
 	}
 	if !cmd.Flags().Changed("ssh-agent") {
 		cfg.ForwardSSHAgent = loadedConfig.ForwardSSHAgent
+	}
+	if !cmd.Flags().Changed("trust-workspace-env") {
+		cfg.TrustWorkspaceEnv = loadedConfig.TrustWorkspaceEnv
 	}
 	cfg.PullPolicy = loadedConfig.PullPolicy
 	if cfg.Offline || cfg.NoInternet {

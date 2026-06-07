@@ -160,6 +160,29 @@ func TestHomeDir(t *testing.T) {
 	}
 }
 
+func TestConfig_TrustWorkspaceEnvDefaultFalseAndEnvOverride(t *testing.T) {
+	v := viper.New()
+	cfg, err := config.Load(v)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.TrustWorkspaceEnv {
+		t.Fatal("TrustWorkspaceEnv default = true, want false")
+	}
+
+	t.Setenv("ABX_TRUST_WORKSPACE_ENV", "true")
+	v = viper.New()
+	v.SetEnvPrefix("ABX")
+	v.AutomaticEnv()
+	cfg, err = config.Load(v)
+	if err != nil {
+		t.Fatalf("Load() with env override error: %v", err)
+	}
+	if !cfg.TrustWorkspaceEnv {
+		t.Fatal("TrustWorkspaceEnv with ABX_TRUST_WORKSPACE_ENV=true = false, want true")
+	}
+}
+
 func TestLoad_Defaults(t *testing.T) {
 	v := viper.New()
 	cfg, err := config.Load(v)
@@ -177,6 +200,7 @@ func TestLoad_Defaults(t *testing.T) {
 		{"default memory limit", cfg.MemoryLimit, "4g"},
 		{"default cpu limit", cfg.CPULimit, 2.0},
 		{"default SSH agent forwarding", cfg.ForwardSSHAgent, false},
+		{"default trust workspace env", cfg.TrustWorkspaceEnv, false},
 	}
 
 	for _, tt := range tests {

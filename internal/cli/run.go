@@ -23,20 +23,21 @@ import (
 // SessionConfig holds the resolved configuration for a run command.
 // Cobra flags bind directly to this struct.
 type SessionConfig struct {
-	Editor          string
-	Shell           bool
-	ForceIT         bool
-	Offline         bool
-	StrictNetwork   bool
-	NoInternet      bool
-	ForceSync       bool
-	ExcludeURL      string
-	PullPolicy      string
-	MemoryLimit     string
-	CPULimit        float64
-	ForwardSSHAgent bool
-	ExtraEnv        []string
-	EditorArgs      []string
+	Editor            string
+	Shell             bool
+	ForceIT           bool
+	Offline           bool
+	StrictNetwork     bool
+	NoInternet        bool
+	ForceSync         bool
+	ExcludeURL        string
+	PullPolicy        string
+	MemoryLimit       string
+	CPULimit          float64
+	ForwardSSHAgent   bool
+	TrustWorkspaceEnv bool
+	ExtraEnv          []string
+	EditorArgs        []string
 }
 
 const (
@@ -64,6 +65,8 @@ func nonZeroExitCode(code int) int {
 // blockedEnvKeys are environment variables that must never be injected
 // into the container from .abxenv — they control critical runtime behavior.
 var blockedEnvKeys = map[string]bool{
+	"HOST_UID": true, "HOST_GID": true, "SSH_AUTH_SOCK": true,
+	"ABX_SESSION_ID": true, "ABX_WORKSPACE": true,
 	"PATH": true, "HOME": true, "USER": true, "HOSTNAME": true,
 	"SHELL": true, "UID": true, "GID": true, "PWD": true,
 	"LANG": true, "TERM": true, "DISPLAY": true, "XAUTHORITY": true,
@@ -74,7 +77,12 @@ var blockedEnvKeys = map[string]bool{
 // Returns KEY=VALUE pairs resolved from the host environment.
 // Dangerous variable names (PATH, HOME, etc.) are silently skipped.
 // Returns nil if the file doesn't exist.
-func LoadDotEnv(dir string) ([]string, error) {
+func LoadDotEnv(dir string, trustWorkspaceEnv ...bool) ([]string, error) {
+	trusted := len(trustWorkspaceEnv) > 0 && trustWorkspaceEnv[0]
+	if !trusted {
+		return nil, nil
+	}
+
 	path := filepath.Join(dir, ".abxenv")
 	data, err := os.ReadFile(path)
 	if err != nil {

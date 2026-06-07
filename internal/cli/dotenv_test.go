@@ -8,6 +8,54 @@ import (
 	"github.com/r-dson/abox/internal/cli"
 )
 
+func TestLoadDotEnv_DisabledByDefault(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".abxenv"), []byte("OPENAI_API_KEY\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OPENAI_API_KEY", "host-secret")
+
+	got, err := cli.LoadDotEnv(dir, false)
+	if err != nil {
+		t.Fatalf("LoadDotEnv() error: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("LoadDotEnv() = %v, want nil when trust disabled", got)
+	}
+}
+
+func TestLoadDotEnv_TrustedAllowsOnlyHostAllowlistValues(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".abxenv"), []byte("OPENAI_API_KEY=file-secret\nANTHROPIC_API_KEY\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OPENAI_API_KEY", "host-openai")
+	t.Setenv("ANTHROPIC_API_KEY", "host-anthropic")
+
+	got, err := cli.LoadDotEnv(dir, true)
+	if err != nil {
+		t.Fatalf("LoadDotEnv() error: %v", err)
+	}
+	want := []string{"OPENAI_API_KEY=host-openai", "ANTHROPIC_API_KEY=host-anthropic"}
+	assertStringSlicesEqual(t, got, want)
+}
+
+func TestLoadDotEnv_BlocksABoxControlKeys(t *testing.T) {
+	dir := t.TempDir()
+	content := "HOST_UID\nHOST_GID\nSSH_AUTH_SOCK\nABX_SESSION_ID\nABX_WORKSPACE\nPATH\nHOME\nUSER\nSHELL\nPWD\nTERM\nDISPLAY\nOPENAI_API_KEY\n"
+	if err := os.WriteFile(filepath.Join(dir, ".abxenv"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OPENAI_API_KEY", "host-secret")
+
+	got, err := cli.LoadDotEnv(dir, true)
+	if err != nil {
+		t.Fatalf("LoadDotEnv() error: %v", err)
+	}
+	want := []string{"OPENAI_API_KEY=host-secret"}
+	assertStringSlicesEqual(t, got, want)
+}
+
 func TestLoadDotEnv(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -66,7 +114,7 @@ func TestLoadDotEnv(t *testing.T) {
 				}
 			}
 
-			got, err := cli.LoadDotEnv(dir)
+			got, err := cli.LoadDotEnv(dir, true)
 			if err != nil {
 				t.Fatalf("LoadDotEnv() error: %v", err)
 			}
@@ -99,8 +147,20 @@ func TestLoadDotEnv_ReturnsReadError(t *testing.T) {
 		t.Fatalf("creating .abxenv directory fixture: %v", err)
 	}
 
-	_, err := cli.LoadDotEnv(dir)
+	_, err := cli.LoadDotEnv(dir, true)
 	if err == nil {
 		t.Fatal("expected read error")
+	}
+}
+
+func assertStringSlicesEqual(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got[%d] = %q, want %q (full got %v)", i, got[i], want[i], got)
+		}
 	}
 }
