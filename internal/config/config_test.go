@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,19 @@ import (
 	"github.com/r-dson/abox/internal/config"
 	"github.com/spf13/viper"
 )
+
+func TestEditorRegistriesMatchCanonical(t *testing.T) {
+	canonical := readCanonicalEditorJSON(t, filepath.Join("..", "..", "config", "editors.json"))
+	for _, path := range []string{
+		filepath.Join("editors.json"),
+		filepath.Join("..", "..", "bin", "editors.json"),
+	} {
+		got := readCanonicalEditorJSON(t, path)
+		if string(got) != string(canonical) {
+			t.Fatalf("%s differs from config/editors.json", path)
+		}
+	}
+}
 
 func TestLoadEditorRegistry(t *testing.T) {
 	registry, err := config.LoadEditorRegistry()
@@ -210,6 +224,23 @@ func TestLoad_Defaults(t *testing.T) {
 			}
 		})
 	}
+}
+
+func readCanonicalEditorJSON(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		t.Fatalf("parsing %s: %v", path, err)
+	}
+	canonical, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("canonicalizing %s: %v", path, err)
+	}
+	return canonical
 }
 
 func TestLoad_ReadsJSONConfig(t *testing.T) {

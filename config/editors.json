@@ -15,7 +15,9 @@
       "cmd_name": "claude",
       "image_tag": "ghcr.io/r-dson/abox:claude",
       "config_path": ".claude",
-      "env_vars": ["ANTHROPIC_API_KEY"],
+      "env_vars": [
+        "ANTHROPIC_API_KEY"
+      ],
       "legacy_path": ""
     },
     "aider": {
@@ -24,8 +26,12 @@
       "cmd_name": "aider",
       "image_tag": "ghcr.io/r-dson/abox:aider",
       "config_path": ".aider.conf.yml",
-      "env_vars": ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"],
-      "legacy_path": ""
+      "env_vars": [
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY"
+      ],
+      "legacy_path": "",
+      "config_is_file": true
     },
     "copilot": {
       "version": "1.0.60",
@@ -33,7 +39,9 @@
       "cmd_name": "copilot",
       "image_tag": "ghcr.io/r-dson/abox:copilot",
       "config_path": ".copilot",
-      "env_vars": ["GITHUB_TOKEN"],
+      "env_vars": [
+        "GITHUB_TOKEN"
+      ],
       "legacy_path": ""
     },
     "vibe": {
@@ -69,7 +77,13 @@
       "cmd_name": "pi",
       "image_tag": "ghcr.io/r-dson/abox:pi",
       "config_path": ".pi",
-      "env_vars": ["ANTHROPIC_API_KEY", "ANTHROPIC_OAUTH_TOKEN", "OPENAI_API_KEY", "AZURE_OPENAI_API_KEY", "GEMINI_API_KEY"],
+      "env_vars": [
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_OAUTH_TOKEN",
+        "OPENAI_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+        "GEMINI_API_KEY"
+      ],
       "legacy_path": ""
     },
     "gemini": {
@@ -78,7 +92,9 @@
       "cmd_name": "gemini",
       "image_tag": "ghcr.io/r-dson/abox:gemini",
       "config_path": ".gemini",
-      "env_vars": ["GOOGLE_API_KEY"],
+      "env_vars": [
+        "GOOGLE_API_KEY"
+      ],
       "legacy_path": ""
     }
   }
