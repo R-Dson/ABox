@@ -5,20 +5,33 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/r-dson/abox/internal/cli"
 )
 
-var version = "dev"
+var (
+	version        = "dev"
+	newRootCmdFunc = cli.NewRootCmd
+)
 
 func main() {
-	root := cli.NewRootCmd(version)
-	if err := root.ExecuteContext(context.Background()); err != nil {
+	os.Exit(run())
+}
+
+func run() int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	root := newRootCmdFunc(version)
+	if err := root.ExecuteContext(ctx); err != nil {
 		var exitErr *cli.ExitError
 		if errors.As(err, &exitErr) {
-			os.Exit(exitErr.Code)
+			return exitErr.Code
 		}
 		fmt.Fprintf(os.Stderr, "abx: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
