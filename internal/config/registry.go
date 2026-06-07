@@ -4,10 +4,11 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"sync"
+
+	"github.com/r-dson/abox/internal/osutil"
 )
 
 //go:embed editors.json
@@ -115,9 +116,5 @@ func (r *EditorRegistry) Has(name string) bool {
 
 // HomeDir returns the user's home directory.
 func HomeDir() string {
-	if home := os.Getenv("HOME"); home != "" {
-		return home
-	}
-	home, _ := os.UserHomeDir()
-	return home
+	return osutil.HomeDir()
 }

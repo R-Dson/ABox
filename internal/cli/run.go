@@ -15,6 +15,7 @@ import (
 	"github.com/r-dson/abox/internal/config"
 	"github.com/r-dson/abox/internal/container"
 	"github.com/r-dson/abox/internal/exclusion"
+	"github.com/r-dson/abox/internal/osutil"
 	"github.com/r-dson/abox/internal/runtime"
 	"github.com/r-dson/abox/internal/sync"
 	"golang.org/x/sync/errgroup"
@@ -136,7 +137,7 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		return fmt.Errorf("resolving editor: %w", err)
 	}
 
-	home := config.HomeDir()
+	home := osutil.HomeDir()
 	if err := ensureEditorDataDirs(profile, home); err != nil {
 		return fmt.Errorf("preparing editor data directories: %w", err)
 	}

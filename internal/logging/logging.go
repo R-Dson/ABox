@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/r-dson/abox/internal/config"
+	"github.com/r-dson/abox/internal/osutil"
 )
 
 var (
@@ -36,7 +36,7 @@ func Setup(verbose, jsonOutput bool) error {
 	opts := &slog.HandlerOptions{Level: level}
 
 	if verbose {
-		logDir := filepath.Join(config.HomeDir(), ".local", "state", "abx")
+		logDir := filepath.Join(osutil.HomeDir(), ".local", "state", "abx")
 		if err := os.MkdirAll(logDir, 0o700); err != nil {
 			return fmt.Errorf("creating log directory: %w", err)
 		}
