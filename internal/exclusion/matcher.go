@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,6 +78,14 @@ func BuildMatcherWithRemote(ctx context.Context, workdir, excludeURL string) (*M
 }
 
 func loadRemoteIgnore(ctx context.Context, excludeURL string) ([]string, error) {
+	parsedURL, err := url.Parse(excludeURL)
+	if err != nil {
+		return nil, fmt.Errorf("parsing exclude URL: %w", err)
+	}
+	if parsedURL.Scheme != "https" {
+		return nil, fmt.Errorf("exclude URL must use HTTPS")
+	}
+
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, excludeURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating exclude URL request: %w", err)

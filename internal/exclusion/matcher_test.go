@@ -91,22 +91,10 @@ func TestBuildMatcher_ReturnsLocalIgnoreReadError(t *testing.T) {
 	}
 }
 
-func TestBuildMatcherWithRemote_LoadsRemoteIgnore(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("remote-secret/\n*.token\n"))
-	}))
-	defer server.Close()
-
-	m, err := exclusion.BuildMatcherWithRemote(t.Context(), t.TempDir(), server.URL)
-	if err != nil {
-		t.Fatalf("BuildMatcherWithRemote() error: %v", err)
-	}
-
-	if !m.Match("remote-secret/value.txt") {
-		t.Error("remote directory pattern should match")
-	}
-	if !m.Match("api.token") {
-		t.Error("remote glob pattern should match")
+func TestBuildMatcherWithRemote_RejectsHTTPURL(t *testing.T) {
+	_, err := exclusion.BuildMatcherWithRemote(t.Context(), t.TempDir(), "http://example.com/.abxignore")
+	if err == nil || !strings.Contains(err.Error(), "HTTPS") {
+		t.Fatalf("BuildMatcherWithRemote() error = %v, want HTTPS rejection", err)
 	}
 }
 

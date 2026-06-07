@@ -7,6 +7,45 @@ import (
 	"github.com/r-dson/abox/internal/exclusion"
 )
 
+func TestHardcodedPatterns_CommonCredentialStores(t *testing.T) {
+	patterns := exclusion.HardcodedPatterns()
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{path: ".env.local", want: true},
+		{path: "services/api/.env.production", want: true},
+		{path: ".kube/config", want: true},
+		{path: ".docker/config.json", want: true},
+		{path: ".config/gcloud/application_default_credentials.json", want: true},
+		{path: ".azure/accessTokens.json", want: true},
+		{path: ".pypirc", want: true},
+		{path: ".netlify/config.json", want: true},
+		{path: ".npmrc", want: true},
+		{path: ".yarnrc", want: true},
+		{path: ".cargo/credentials", want: true},
+		{path: ".git/credentials", want: true},
+		{path: "id_ed25519", want: true},
+		{path: "certs/prod.key", want: true},
+		{path: "secrets/api_key", want: true},
+		{path: "monkey", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			matched := false
+			for _, p := range patterns {
+				if ok, _ := doublestar.Match(p, tt.path); ok {
+					matched = true
+					break
+				}
+			}
+			if matched != tt.want {
+				t.Fatalf("path %q matched=%v, want %v", tt.path, matched, tt.want)
+			}
+		})
+	}
+}
+
 func TestHardcodedPatterns(t *testing.T) {
 	patterns := exclusion.HardcodedPatterns()
 	if len(patterns) == 0 {
