@@ -250,6 +250,21 @@ func TestConfig_TrustWorkspaceEnvDefaultFalseAndEnvOverride(t *testing.T) {
 	}
 }
 
+func TestErrorsAsTypeUsed(t *testing.T) {
+	for _, path := range []string{
+		filepath.Join("config.go"),
+		filepath.Join("..", "..", "cmd", "abx", "main.go"),
+	} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("reading %s: %v", path, err)
+		}
+		if strings.Contains(string(data), "errors.As(") {
+			t.Fatalf("%s still uses manual errors.As", path)
+		}
+	}
+}
+
 func TestConfigEnvOverrides_AllDocumentedKeys(t *testing.T) {
 	t.Setenv("ABX_EDITOR", "claude")
 	t.Setenv("ABX_EXCLUDE_URL", "https://example.com/ignore")

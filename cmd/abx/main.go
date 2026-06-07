@@ -26,8 +26,7 @@ func run() int {
 
 	root := newRootCmdFunc(version)
 	if err := root.ExecuteContext(ctx); err != nil {
-		var exitErr *cli.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*cli.ExitError](err); ok {
 			return exitErr.Code
 		}
 		fmt.Fprintf(os.Stderr, "abx: %v\n", err)

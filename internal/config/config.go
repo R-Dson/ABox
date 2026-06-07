@@ -81,8 +81,7 @@ func bindEnv(v *viper.Viper) error {
 
 // isConfigNotFound returns true if the error is due to a missing config file.
 func isConfigNotFound(err error) bool {
-	var notFound viper.ConfigFileNotFoundError
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); ok {
 		return true
 	}
 	return errors.Is(err, os.ErrNotExist)
