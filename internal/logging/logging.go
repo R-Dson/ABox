@@ -2,18 +2,31 @@ package logging
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/r-dson/abox/internal/config"
+)
+
+var (
+	logFileMu      sync.Mutex
+	verboseLogFile *os.File
 )
 
 // Setup configures the global slog logger.
 // When verbose is true, logs are written to ~/.local/state/abx/abx.log.
 // When jsonOutput is true, stderr gets JSON-formatted logs.
 func Setup(verbose, jsonOutput bool) error {
+	logFileMu.Lock()
+	defer logFileMu.Unlock()
+	if err := closeVerboseLogFileLocked(); err != nil {
+		return fmt.Errorf("closing previous log file: %w", err)
+	}
+
 	level := slog.LevelInfo
 	if verbose {
 		level = slog.LevelDebug
@@ -33,10 +46,11 @@ func Setup(verbose, jsonOutput bool) error {
 		if err != nil {
 			return fmt.Errorf("opening log file: %w", err)
 		}
+		verboseLogFile = f
 		handlers = append(handlers, slog.NewTextHandler(f, opts))
 	}
 
-	if jsonOutput || !isTerminal(os.Stderr) {
+	if jsonOutput {
 		handlers = append(handlers, slog.NewJSONHandler(os.Stderr, opts))
 	} else {
 		handlers = append(handlers, slog.NewTextHandler(os.Stderr, opts))
@@ -52,12 +66,23 @@ func Setup(verbose, jsonOutput bool) error {
 	return nil
 }
 
-func isTerminal(f *os.File) bool {
-	fi, err := f.Stat()
-	if err != nil {
-		return false
+// Shutdown closes logging resources opened by Setup.
+func Shutdown() error {
+	logFileMu.Lock()
+	defer logFileMu.Unlock()
+	return closeVerboseLogFileLocked()
+}
+
+func closeVerboseLogFileLocked() error {
+	if verboseLogFile == nil {
+		return nil
 	}
-	return (fi.Mode() & os.ModeCharDevice) != 0
+	f := verboseLogFile
+	verboseLogFile = nil
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("closing verbose log file: %w", err)
+	}
+	return nil
 }
 
 // multiHandler fans out log records to multiple handlers.
@@ -75,10 +100,14 @@ func (m *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (m *multiHandler) Handle(ctx context.Context, r slog.Record) error {
+	var errs []error
 	for _, h := range m.handlers {
 		if err := h.Handle(ctx, r); err != nil {
-			return fmt.Errorf("multi-handler: %w", err)
+			errs = append(errs, err)
 		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("multi-handler: %w", errors.Join(errs...))
 	}
 	return nil
 }

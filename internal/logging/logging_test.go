@@ -1,8 +1,10 @@
 package logging_test
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/r-dson/abox/internal/logging"
@@ -41,6 +43,33 @@ func TestSetup_NonVerboseNoFile(t *testing.T) {
 	logFile := filepath.Join(tmpHome, ".local", "state", "abx", "abx.log")
 	if _, err := os.Stat(logFile); err == nil {
 		t.Error("log file should not be created when verbose=false")
+	}
+}
+
+func TestLogging_JSONOnlyWhenFlagTrue(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	path := filepath.Join(t.TempDir(), "stderr.log")
+	stderr, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStderr := os.Stderr
+	os.Stderr = stderr
+	defer func() { os.Stderr = oldStderr }()
+
+	if err := logging.Setup(false, false); err != nil {
+		t.Fatalf("Setup() error: %v", err)
+	}
+	slog.Info("hello")
+	if err := stderr.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.HasPrefix(strings.TrimSpace(string(data)), "{") {
+		t.Fatalf("stderr log is JSON without json flag: %q", data)
 	}
 }
 
