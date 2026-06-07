@@ -77,6 +77,19 @@ func (d *dockerRuntime) NetworkRemove(ctx context.Context, id string) error {
 }
 
 func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec) (string, error) {
+	containerConfig, hostConfig, err := dockerCreateConfigs(spec)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := d.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, spec.Name)
+	if err != nil {
+		return "", fmt.Errorf("creating container %s: %w", spec.Name, err)
+	}
+	return resp.ID, nil
+}
+
+func dockerCreateConfigs(spec ContainerSpec) (*dockercontainer.Config, *dockercontainer.HostConfig, error) {
 	containerConfig := &dockercontainer.Config{
 		Image:        spec.Image,
 		Cmd:          spec.Cmd,
@@ -120,7 +133,7 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec)
 
 	securityOpt, err := normalizeSecurityOpt(spec.SecurityOpt)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	hostConfig := &dockercontainer.HostConfig{
@@ -147,12 +160,7 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec)
 	if spec.NanoCPUs > 0 {
 		hostConfig.NanoCPUs = spec.NanoCPUs
 	}
-
-	resp, err := d.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, spec.Name)
-	if err != nil {
-		return "", fmt.Errorf("creating container %s: %w", spec.Name, err)
-	}
-	return resp.ID, nil
+	return containerConfig, hostConfig, nil
 }
 
 func normalizeSecurityOpt(opts []string) ([]string, error) {
