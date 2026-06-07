@@ -312,6 +312,11 @@ func writeTarFile(tw *tar.Writer, filePath, name string) error {
 		return fmt.Errorf("file info: %w", err)
 	}
 
+	if !info.Mode().IsRegular() && !info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+		slog.Debug("skipping special file during tar", "path", filePath, "mode", info.Mode())
+		return nil
+	}
+
 	linkTarget := ""
 	if info.Mode()&os.ModeSymlink != 0 {
 		linkTarget, err = os.Readlink(filePath)

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/r-dson/abox/internal/exclusion"
@@ -109,6 +110,28 @@ func TestTarFiltered_NilMatcherIncludesAll(t *testing.T) {
 	entries := readTarEntries(t, buf)
 	if len(entries) != 2 {
 		t.Errorf("nil matcher should include all files, got %d: %v", len(entries), entries)
+	}
+}
+
+func TestTarFiltered_SkipsSpecialFiles(t *testing.T) {
+	dir := t.TempDir()
+	fifoPath := filepath.Join(dir, "events.fifo")
+	if err := syscall.Mkfifo(fifoPath, 0o600); err != nil {
+		t.Fatalf("creating fifo: %v", err)
+	}
+	mustWriteFile(t, filepath.Join(dir, "regular.txt"), []byte("regular"), 0o644)
+
+	buf := new(bytes.Buffer)
+	if err := syncpkg.TarFiltered(dir, buf, nil); err != nil {
+		t.Fatalf("TarFiltered() error: %v", err)
+	}
+
+	entries := readTarEntries(t, buf)
+	if _, ok := entries["events.fifo"]; ok {
+		t.Fatal("fifo should be skipped")
+	}
+	if entries["regular.txt"] != "regular" {
+		t.Fatalf("regular.txt = %q, want regular", entries["regular.txt"])
 	}
 }
 
