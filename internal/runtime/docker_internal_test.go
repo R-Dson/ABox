@@ -43,6 +43,19 @@ func TestNormalizeSecurityOptLeavesInlineSeccompAndUnconfined(t *testing.T) {
 	}
 }
 
+func TestContainerAttach_StdinFollowsSpec(t *testing.T) {
+	d := &dockerRuntime{}
+	d.recordOpenStdin("stdin", true)
+	d.recordOpenStdin("no-stdin", false)
+
+	if !d.attachOptions("stdin").Stdin {
+		t.Fatal("AttachOptions.Stdin = false, want true for OpenStdin container")
+	}
+	if d.attachOptions("no-stdin").Stdin {
+		t.Fatal("AttachOptions.Stdin = true, want false without OpenStdin")
+	}
+}
+
 func TestContainerWait_WrapsErrorWithContainerID(t *testing.T) {
 	wantErr := errors.New("daemon failed")
 	statusCh := make(<-chan dockercontainer.WaitResponse)

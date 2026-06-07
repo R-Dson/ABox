@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
@@ -18,7 +19,9 @@ import (
 )
 
 type dockerRuntime struct {
-	client *dockerclient.Client
+	client      *dockerclient.Client
+	stdinMu     sync.Mutex
+	openStdinBy map[string]bool
 }
 
 // Compile-time interface check.
@@ -86,6 +89,7 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec)
 	if err != nil {
 		return "", fmt.Errorf("creating container %s: %w", spec.Name, err)
 	}
+	d.recordOpenStdin(resp.ID, spec.OpenStdin)
 	return resp.ID, nil
 }
 
@@ -223,16 +227,35 @@ func (d *dockerRuntime) ContainerRemove(ctx context.Context, id string, force bo
 }
 
 func (d *dockerRuntime) ContainerAttach(ctx context.Context, id string) (io.ReadWriteCloser, error) {
-	resp, err := d.client.ContainerAttach(ctx, id, dockercontainer.AttachOptions{
-		Stream: true,
-		Stdin:  true,
-		Stdout: true,
-		Stderr: true,
-	})
+	resp, err := d.client.ContainerAttach(ctx, id, d.attachOptions(id))
 	if err != nil {
 		return nil, fmt.Errorf("attaching to container %s: %w", id, err)
 	}
 	return resp.Conn, nil
+}
+
+func (d *dockerRuntime) attachOptions(id string) dockercontainer.AttachOptions {
+	return dockercontainer.AttachOptions{
+		Stream: true,
+		Stdin:  d.openStdin(id),
+		Stdout: true,
+		Stderr: true,
+	}
+}
+
+func (d *dockerRuntime) recordOpenStdin(id string, open bool) {
+	d.stdinMu.Lock()
+	defer d.stdinMu.Unlock()
+	if d.openStdinBy == nil {
+		d.openStdinBy = map[string]bool{}
+	}
+	d.openStdinBy[id] = open
+}
+
+func (d *dockerRuntime) openStdin(id string) bool {
+	d.stdinMu.Lock()
+	defer d.stdinMu.Unlock()
+	return d.openStdinBy[id]
 }
 
 func (d *dockerRuntime) ContainerResize(ctx context.Context, id string, height, width uint) error {
