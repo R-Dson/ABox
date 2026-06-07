@@ -271,12 +271,21 @@ func makeStdinRaw() (func() error, error) {
 	}, nil
 }
 
+type closeWriter interface {
+	CloseWrite() error
+}
+
 func streamContainerIO(attached io.ReadWriteCloser, stdin io.Reader, stdout, stderr io.Writer, forwardInput, tty bool) <-chan error {
 	done := make(chan error, 1)
 	if forwardInput && stdin != nil {
 		go func() {
 			if _, err := io.Copy(attached, stdin); err != nil {
 				slog.Debug("container stdin stream ended with error", "error", err)
+			}
+			if c, ok := attached.(closeWriter); ok {
+				if err := c.CloseWrite(); err != nil {
+					slog.Debug("container stdin close failed", "error", err)
+				}
 			}
 		}()
 	}

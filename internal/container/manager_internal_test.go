@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/r-dson/abox/internal/runtimetest"
@@ -117,6 +118,23 @@ func TestStopForwardedSignalsRunsBothCleanupCallbacks(t *testing.T) {
 	}
 }
 
+func TestStreamContainerIO_ForwardsNonTTYInputAndCloses(t *testing.T) {
+	attached := &stdinTrackingReadWriteCloser{
+		reader:      bytes.NewReader(nil),
+		closeWriter: make(chan struct{}),
+	}
+	_ = streamContainerIO(attached, strings.NewReader("input"), io.Discard, io.Discard, true, false)
+
+	select {
+	case <-attached.closeWriter:
+	case <-time.After(time.Second):
+		t.Fatal("stdin close was not signaled")
+	}
+	if got := attached.writer.String(); got != "input" {
+		t.Fatalf("attached stdin = %q, want input", got)
+	}
+}
+
 func TestStreamContainerOutput(t *testing.T) {
 	attached := &bufferReadWriteCloser{reader: strings.NewReader("container output")}
 	var stdout bytes.Buffer
@@ -157,6 +175,27 @@ func TestStreamContainerOutputDemuxesNonTTY(t *testing.T) {
 		t.Fatalf("stderr = %q, want err", stderr.String())
 	}
 }
+
+type stdinTrackingReadWriteCloser struct {
+	reader      io.Reader
+	writer      bytes.Buffer
+	closeWriter chan struct{}
+}
+
+func (b *stdinTrackingReadWriteCloser) Read(p []byte) (int, error) {
+	return b.reader.Read(p) //nolint:wrapcheck // io.Reader implementations must preserve io.EOF.
+}
+
+func (b *stdinTrackingReadWriteCloser) Write(p []byte) (int, error) {
+	return b.writer.Write(p) //nolint:wrapcheck // bytes.Buffer preserves write contract.
+}
+
+func (b *stdinTrackingReadWriteCloser) CloseWrite() error {
+	close(b.closeWriter)
+	return nil
+}
+
+func (b *stdinTrackingReadWriteCloser) Close() error { return nil }
 
 type bufferReadWriteCloser struct {
 	reader io.Reader
