@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,6 +72,17 @@ func TestValidateSessionConfig(t *testing.T) {
 				t.Fatalf("validateSessionConfig() error = %v, want containing %q", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestHomeDir_PropagatesErrorsForSecurityChecks(t *testing.T) {
+	oldSecureHomeDir := secureHomeDirFunc
+	secureHomeDirFunc = func() (string, error) { return "", errors.New("home unavailable") }
+	defer func() { secureHomeDirFunc = oldSecureHomeDir }()
+
+	err := ValidateWorkdir(t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "resolving user home") {
+		t.Fatalf("ValidateWorkdir() error = %v, want resolving user home", err)
 	}
 }
 

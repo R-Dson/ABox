@@ -47,6 +47,8 @@ const (
 	pullPolicyNever   = "never"
 )
 
+var secureHomeDirFunc = osutil.SystemHomeDir
+
 // ExitError wraps an exit code from the container process.
 type ExitError struct {
 	Code int
@@ -450,8 +452,11 @@ func ValidateWorkdir(abs string) error {
 	}
 	abs = resolved
 
-	home, _ := os.UserHomeDir()
-	if home != "" && abs == home {
+	home, err := secureHomeDirFunc()
+	if err != nil {
+		return fmt.Errorf("resolving user home: %w", err)
+	}
+	if abs == home {
 		return fmt.Errorf("cannot use $HOME (%s) as workspace", abs)
 	}
 	if abs == "/" {

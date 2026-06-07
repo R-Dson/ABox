@@ -188,7 +188,9 @@ func TestApplyLoadedConfig_PreservesExplicitFlags(t *testing.T) {
 
 func TestResolveWorkdirRejectsSymlinkToHome(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	oldSecureHomeDir := secureHomeDirFunc
+	secureHomeDirFunc = func() (string, error) { return home, nil }
+	defer func() { secureHomeDirFunc = oldSecureHomeDir }()
 	linkPath := filepath.Join(t.TempDir(), "home-link")
 	if err := os.Symlink(home, linkPath); err != nil {
 		t.Fatalf("creating symlink: %v", err)
@@ -196,7 +198,7 @@ func TestResolveWorkdirRejectsSymlinkToHome(t *testing.T) {
 
 	_, err := resolveWorkdir(linkPath)
 	if err == nil {
-		t.Fatal("expected symlink to HOME to be rejected")
+		t.Fatal("expected symlink to user home to be rejected")
 	}
 }
 
