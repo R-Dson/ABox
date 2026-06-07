@@ -110,8 +110,9 @@ func bootstrapOwnership(ctx context.Context, rt runtime.ContainerRuntime, sess *
 		User:       "0:0",
 		Binds:      bindMounts,
 		AutoRemove: true,
-		CapDrop:    []string{"ALL"},
-		CapAdd:     []string{"CHOWN"},
+	}
+	if err := ApplyHelperSecurityDefaults(&spec); err != nil {
+		return err
 	}
 
 	return runEphemeral(ctx, rt, spec, "bootstrap")

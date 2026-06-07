@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	containerpkg "github.com/r-dson/abox/internal/container"
 	"github.com/r-dson/abox/internal/exclusion"
 	"github.com/r-dson/abox/internal/runtime"
 )
@@ -235,8 +236,9 @@ func mountVolumeContainer(ctx context.Context, rt runtime.ContainerRuntime, volu
 		Cmd:        []string{"sleep", "300"},
 		AutoRemove: false,
 		Binds:      []string{volumeName + ":/data"},
-		CapDrop:    []string{"ALL"},
-		CapAdd:     []string{"CHOWN", "DAC_OVERRIDE"},
+	}
+	if err := containerpkg.ApplyHelperSecurityDefaults(&spec); err != nil {
+		return "", nil, err
 	}
 
 	id, err := rt.ContainerCreate(ctx, spec)

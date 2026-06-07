@@ -54,10 +54,20 @@ func TestSyncIn(t *testing.T) {
 	if !created {
 		t.Error("expected a sync container to be created")
 	}
-	for _, want := range []string{"CHOWN", "DAC_OVERRIDE"} {
-		if !slices.Contains(spec.CapAdd, want) {
-			t.Fatalf("sync container CapAdd = %v, want %s", spec.CapAdd, want)
-		}
+	if !slices.Contains(spec.CapAdd, "CHOWN") {
+		t.Fatalf("sync container CapAdd = %v, want CHOWN", spec.CapAdd)
+	}
+	if slices.Contains(spec.CapAdd, "DAC_OVERRIDE") {
+		t.Fatalf("sync container CapAdd = %v, must not include DAC_OVERRIDE", spec.CapAdd)
+	}
+	if spec.NetworkMode != "none" {
+		t.Fatalf("sync container NetworkMode = %q, want none", spec.NetworkMode)
+	}
+	if !slices.Contains(spec.SecurityOpt, "no-new-privileges") {
+		t.Fatalf("sync container SecurityOpt = %v, want no-new-privileges", spec.SecurityOpt)
+	}
+	if spec.Memory == 0 || spec.NanoCPUs == 0 {
+		t.Fatalf("sync helper resources = memory %d nanoCPUs %d, want bounded", spec.Memory, spec.NanoCPUs)
 	}
 }
 
