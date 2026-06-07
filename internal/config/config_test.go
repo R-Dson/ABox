@@ -213,6 +213,20 @@ func TestHomeDir(t *testing.T) {
 	}
 }
 
+func TestDefaultEditorConstantSingleSource(t *testing.T) {
+	if config.DefaultEditor != "opencode" {
+		t.Fatalf("DefaultEditor = %q, want opencode", config.DefaultEditor)
+	}
+	v := viper.New()
+	cfg, err := config.Load(v)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Editor != config.DefaultEditor {
+		t.Fatalf("loaded default editor = %q, want %q", cfg.Editor, config.DefaultEditor)
+	}
+}
+
 func TestConfig_TrustWorkspaceEnvDefaultFalseAndEnvOverride(t *testing.T) {
 	v := viper.New()
 	cfg, err := config.Load(v)

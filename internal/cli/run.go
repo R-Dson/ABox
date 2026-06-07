@@ -128,7 +128,7 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 
 	editorName := cfg.Editor
 	if editorName == "" {
-		editorName = "opencode"
+		editorName = config.DefaultEditor
 	}
 
 	profile, err := registry.Get(editorName)

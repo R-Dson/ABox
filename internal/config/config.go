@@ -8,6 +8,9 @@ import (
 	"github.com/spf13/viper"
 )
 
+// DefaultEditor is the editor used when no editor is configured or requested.
+const DefaultEditor = "opencode"
+
 // Config holds all user-configurable settings.
 type Config struct {
 	Editor            string  `mapstructure:"editor" json:"editor"`
@@ -27,7 +30,7 @@ type Config struct {
 // Load reads configuration from the provided Viper instance.
 // Missing config file is not an error — defaults apply.
 func Load(v *viper.Viper) (*Config, error) {
-	v.SetDefault("editor", "opencode")
+	v.SetDefault("editor", DefaultEditor)
 	v.SetDefault("pull_policy", "never")
 	v.SetDefault("memory_limit", "4g")
 	v.SetDefault("cpu_limit", 2.0)
