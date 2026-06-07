@@ -1,6 +1,7 @@
 package container_test
 
 import (
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
@@ -329,6 +330,18 @@ func TestBuildSpec_NoNewPrivileges(t *testing.T) {
 	}
 }
 
+func TestSeccompProfilePath_UsesProductionConfig(t *testing.T) {
+	path, err := container.SeccompProfilePath()
+	if err != nil {
+		t.Fatalf("SeccompProfilePath() error: %v", err)
+	}
+	materialized := readCanonicalJSON(t, path)
+	production := readCanonicalJSON(t, filepath.Join("..", "..", "config", "seccomp", "abox-default.json"))
+	if string(materialized) != string(production) {
+		t.Fatal("materialized seccomp profile differs from config/seccomp/abox-default.json")
+	}
+}
+
 func TestSeccompProfileIsValid(t *testing.T) {
 	path, err := container.SeccompProfilePath()
 	if err != nil {
@@ -355,6 +368,23 @@ func TestBuildSpec_ReturnsInvalidMemoryLimitError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid memory limit error")
 	}
+}
+
+func readCanonicalJSON(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading JSON %s: %v", path, err)
+	}
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		t.Fatalf("parsing JSON %s: %v", path, err)
+	}
+	canonical, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("canonicalizing JSON %s: %v", path, err)
+	}
+	return canonical
 }
 
 func mustBuildSpec(t *testing.T, profile config.EditorProfile, sess *container.Session, workdir string, cfg *config.Config) runtime.ContainerSpec {

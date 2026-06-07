@@ -6,9 +6,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	_ "embed"
-
 	"github.com/docker/go-units"
+	seccompprofile "github.com/r-dson/abox/config/seccomp"
 	"github.com/r-dson/abox/internal/config"
 	"github.com/r-dson/abox/internal/runtime"
 )
@@ -21,9 +20,6 @@ const (
 	defaultPidsLimit     = int64(512)
 )
 
-//go:embed testdata/seccomp.json
-var seccompProfile []byte
-
 // seccompPath materializes the embedded seccomp profile to a temp file.
 // The Docker API requires a filesystem path, not inline JSON.
 // Validates the JSON after writing to prevent corruption.
@@ -33,7 +29,7 @@ var seccompPath = sync.OnceValues(func() (string, error) {
 		return "", fmt.Errorf("creating seccomp temp file: %w", err)
 	}
 	defer f.Close()
-	if _, err := f.Write(seccompProfile); err != nil {
+	if _, err := f.Write(seccompprofile.ABoxDefault); err != nil {
 		return "", fmt.Errorf("writing seccomp profile: %w", err)
 	}
 	info, err := f.Stat()
