@@ -36,6 +36,10 @@ func Load(v *viper.Viper) (*Config, error) {
 	v.SetDefault("cpu_limit", 2.0)
 	v.SetDefault("trust_workspace_env", false)
 
+	if err := bindEnv(v); err != nil {
+		return nil, err
+	}
+
 	if err := v.ReadInConfig(); err != nil {
 		// Missing config file is fine — use defaults
 		// Viper returns different error types depending on how config path was set,
@@ -50,6 +54,29 @@ func Load(v *viper.Viper) (*Config, error) {
 		return nil, fmt.Errorf("unmarshaling config: %w", err)
 	}
 	return &cfg, nil
+}
+
+func bindEnv(v *viper.Viper) error {
+	bindings := map[string]string{
+		"editor":              "ABX_EDITOR",
+		"exclude_url":         "ABX_EXCLUDE_URL",
+		"no_internet":         "ABX_NO_INTERNET",
+		"strict_network":      "ABX_STRICT_NETWORK",
+		"pull_policy":         "ABX_PULL_POLICY",
+		"memory_limit":        "ABX_MEMORY_LIMIT",
+		"cpu_limit":           "ABX_CPU_LIMIT",
+		"forward_ssh_agent":   "ABX_FORWARD_SSH_AGENT",
+		"forward_git_config":  "ABX_FORWARD_GIT_CONFIG",
+		"trust_workspace_env": "ABX_TRUST_WORKSPACE_ENV",
+		"verbose":             "ABX_VERBOSE",
+		"json_logs":           "ABX_JSON_LOGS",
+	}
+	for key, env := range bindings {
+		if err := v.BindEnv(key, env); err != nil {
+			return fmt.Errorf("binding %s: %w", env, err)
+		}
+	}
+	return nil
 }
 
 // isConfigNotFound returns true if the error is due to a missing config file.

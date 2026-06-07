@@ -250,6 +250,34 @@ func TestConfig_TrustWorkspaceEnvDefaultFalseAndEnvOverride(t *testing.T) {
 	}
 }
 
+func TestConfigEnvOverrides_AllDocumentedKeys(t *testing.T) {
+	t.Setenv("ABX_EDITOR", "claude")
+	t.Setenv("ABX_EXCLUDE_URL", "https://example.com/ignore")
+	t.Setenv("ABX_NO_INTERNET", "true")
+	t.Setenv("ABX_STRICT_NETWORK", "true")
+	t.Setenv("ABX_PULL_POLICY", "missing")
+	t.Setenv("ABX_MEMORY_LIMIT", "8g")
+	t.Setenv("ABX_CPU_LIMIT", "4.5")
+	t.Setenv("ABX_FORWARD_SSH_AGENT", "true")
+	t.Setenv("ABX_FORWARD_GIT_CONFIG", "true")
+	t.Setenv("ABX_TRUST_WORKSPACE_ENV", "true")
+	t.Setenv("ABX_VERBOSE", "true")
+	t.Setenv("ABX_JSON_LOGS", "true")
+
+	v := viper.New()
+	v.SetEnvPrefix("ABX")
+	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	v.AutomaticEnv()
+	cfg, err := config.Load(v)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Editor != "claude" || cfg.ExcludeURL != "https://example.com/ignore" || !cfg.NoInternet || !cfg.StrictNetwork || cfg.PullPolicy != "missing" || cfg.MemoryLimit != "8g" || cfg.CPULimit != 4.5 || !cfg.ForwardSSHAgent || !cfg.ForwardGitConfig || !cfg.TrustWorkspaceEnv || !cfg.Verbose || !cfg.JSONLogs {
+		t.Fatalf("config env overrides not applied: %+v", cfg)
+	}
+}
+
 func TestLoad_Defaults(t *testing.T) {
 	v := viper.New()
 	cfg, err := config.Load(v)
