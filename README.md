@@ -116,13 +116,15 @@ ABox is secure-by-default and fails early when safety checks fail.
 
 ## Content Exclusion
 
-Create a `.abxignore` file to exclude sensitive files or large directories from the sandbox using glob patterns:
+Create a `.abxignore` file to exclude sensitive files or large directories from the sandbox using simple doublestar glob patterns:
 
 ```text
 .env
 secrets/*.json
 node_modules/
 ```
+
+`.abxignore` is not full gitignore syntax. A leading `/` is treated as part of the pattern, `!` negation is not supported, and backslash escapes follow doublestar behavior. Directory patterns ending in `/` match that directory name at any depth.
 
 Hardcoded security patterns always apply, including `.ssh`, `.aws`, `.env`, `.gnupg`, `.netrc`, `.npmrc`, `*.pem`, `*.p12`, `*.pfx`, `*key`, and `*_key`.
 
