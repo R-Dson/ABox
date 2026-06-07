@@ -161,17 +161,18 @@ func readIgnorePatterns(r io.Reader) ([]string, error) {
 }
 
 func mergePatterns(base, additional []string) []string {
+	merged := append([]string(nil), base...)
 	seen := make(map[string]bool)
-	for _, p := range base {
+	for _, p := range merged {
 		seen[p] = true
 	}
 	for _, p := range additional {
 		if !seen[p] {
-			base = append(base, p)
+			merged = append(merged, p)
 			seen[p] = true
 		}
 	}
-	return base
+	return merged
 }
 
 // normalizePatterns converts user-facing .gitignore-style patterns

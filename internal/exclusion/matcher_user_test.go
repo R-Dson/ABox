@@ -39,6 +39,29 @@ func TestMatcher_UserFacingPatterns(t *testing.T) {
 	}
 }
 
+func TestMatcher_DocumentsSimpleGlobSemantics(t *testing.T) {
+	m := exclusion.NewMatcher([]string{"/foo", "!bar", `escaped\ space`})
+
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"foo", false},
+		{"/foo", true},
+		{"bar", false},
+		{"!bar", true},
+		{"escaped space", true},
+		{`escaped\ space`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			if got := m.Match(tt.path); got != tt.want {
+				t.Fatalf("Match(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBuildMatcher_LoadsLocalIgnore_UserPatterns(t *testing.T) {
 	dir := t.TempDir()
 	ignoreFile := filepath.Join(dir, ".abxignore")
