@@ -9,11 +9,160 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/r-dson/abox/internal/exclusion"
 	"github.com/r-dson/abox/internal/runtimetest"
 	syncpkg "github.com/r-dson/abox/internal/sync"
 )
+
+func TestSyncOut_WithMatcherSkipsExcludedArchiveEntryAndPreservesHostFile(t *testing.T) {
+	destDir := t.TempDir()
+	mustWriteFile(t, filepath.Join(destDir, ".env"), []byte("HOST_SECRET"), 0o600)
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+	mustTarWrite(t, tw, &tar.Header{Name: ".env", Mode: 0o600, Size: int64(len("SANDBOX_SECRET"))}, []byte("SANDBOX_SECRET"))
+	if err := tw.Close(); err != nil {
+		t.Fatalf("closing tar writer: %v", err)
+	}
+
+	stub := &runtimetest.StubRuntime{
+		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(tarBuf.Bytes())), nil
+		},
+	}
+
+	err := syncpkg.OutWithOptions(t.Context(), stub, "test-vol", "/workspace", destDir, syncpkg.Options{
+		Matcher: exclusion.NewMatcher([]string{".env"}),
+	})
+	if err != nil {
+		t.Fatalf("OutWithOptions() error: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(destDir, ".env"))
+	if err != nil {
+		t.Fatalf("reading host .env: %v", err)
+	}
+	if string(data) != "HOST_SECRET" {
+		t.Fatalf("host .env = %q, want HOST_SECRET", string(data))
+	}
+}
+
+func TestSyncOut_WithMatcherDoesNotCreateExcludedPath(t *testing.T) {
+	destDir := t.TempDir()
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+	mustTarWrite(t, tw, &tar.Header{Name: ".env.local", Mode: 0o600, Size: int64(len("SANDBOX_SECRET"))}, []byte("SANDBOX_SECRET"))
+	if err := tw.Close(); err != nil {
+		t.Fatalf("closing tar writer: %v", err)
+	}
+
+	stub := &runtimetest.StubRuntime{
+		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(tarBuf.Bytes())), nil
+		},
+	}
+
+	err := syncpkg.OutWithOptions(t.Context(), stub, "test-vol", "/workspace", destDir, syncpkg.Options{
+		Matcher: exclusion.NewMatcher([]string{".env.*"}),
+	})
+	if err != nil {
+		t.Fatalf("OutWithOptions() error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(destDir, ".env.local")); !os.IsNotExist(err) {
+		t.Fatalf("excluded file should not be created, stat error = %v", err)
+	}
+}
+
+func TestSyncOut_RejectsSymlinkDestinationRoot(t *testing.T) {
+	outsideDir := t.TempDir()
+	destParent := t.TempDir()
+	destDir := filepath.Join(destParent, "workspace")
+	if err := os.Symlink(outsideDir, destDir); err != nil {
+		t.Fatalf("creating root symlink: %v", err)
+	}
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+	mustTarWrite(t, tw, &tar.Header{Name: "file.txt", Mode: 0o644, Size: int64(len("changed"))}, []byte("changed"))
+	if err := tw.Close(); err != nil {
+		t.Fatalf("closing tar writer: %v", err)
+	}
+
+	stub := &runtimetest.StubRuntime{
+		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(tarBuf.Bytes())), nil
+		},
+	}
+
+	err := syncpkg.Out(t.Context(), stub, "test-vol", "/workspace", destDir)
+	if err == nil || !strings.Contains(err.Error(), "destination root is a symlink") {
+		t.Fatalf("Out() error = %v, want destination root is a symlink", err)
+	}
+	if _, err := os.Stat(filepath.Join(outsideDir, "file.txt")); !os.IsNotExist(err) {
+		t.Fatalf("outside file should not be created, stat error = %v", err)
+	}
+}
+
+func TestSyncOut_RejectsSymlinkParentBeforeMkdirAll(t *testing.T) {
+	destDir := t.TempDir()
+	outsideDir := t.TempDir()
+	if err := os.Symlink(outsideDir, filepath.Join(destDir, "dir")); err != nil {
+		t.Fatalf("creating parent symlink: %v", err)
+	}
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+	mustTarWrite(t, tw, &tar.Header{Name: "dir/file.txt", Mode: 0o644, Size: int64(len("changed"))}, []byte("changed"))
+	if err := tw.Close(); err != nil {
+		t.Fatalf("closing tar writer: %v", err)
+	}
+
+	stub := &runtimetest.StubRuntime{
+		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(tarBuf.Bytes())), nil
+		},
+	}
+
+	err := syncpkg.Out(t.Context(), stub, "test-vol", "/workspace", destDir)
+	if err == nil {
+		t.Fatal("expected parent symlink error")
+	}
+	if _, err := os.Stat(filepath.Join(outsideDir, "file.txt")); !os.IsNotExist(err) {
+		t.Fatalf("outside file should not be created, stat error = %v", err)
+	}
+}
+
+func TestSyncOut_RejectsTraversalBeforeWrite(t *testing.T) {
+	parentDir := t.TempDir()
+	destDir := filepath.Join(parentDir, "workspace")
+	mustMkdirAll(t, destDir)
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+	mustTarWrite(t, tw, &tar.Header{Name: "../escape.txt", Mode: 0o644, Size: int64(len("escape"))}, []byte("escape"))
+	if err := tw.Close(); err != nil {
+		t.Fatalf("closing tar writer: %v", err)
+	}
+
+	stub := &runtimetest.StubRuntime{
+		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(tarBuf.Bytes())), nil
+		},
+	}
+
+	err := syncpkg.Out(t.Context(), stub, "test-vol", "/workspace", destDir)
+	if err == nil || !strings.Contains(err.Error(), "escapes destination") {
+		t.Fatalf("Out() error = %v, want escape error", err)
+	}
+	if _, err := os.Stat(filepath.Join(parentDir, "escape.txt")); !os.IsNotExist(err) {
+		t.Fatalf("escape file should not be created, stat error = %v", err)
+	}
+}
 
 func TestSyncOut_ExtractsTarToHost(t *testing.T) {
 	destDir := t.TempDir()

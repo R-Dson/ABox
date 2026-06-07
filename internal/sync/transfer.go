@@ -87,16 +87,36 @@ func execSuccessful(ctx context.Context, rt runtime.ContainerRuntime, containerI
 // It copies a tar archive from the container, then extracts it to destDir.
 // Skips if destDir doesn't exist.
 func Out(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, destDir string) error {
+	return OutWithOptions(ctx, rt, volumeName, srcPath, destDir, Options{})
+}
+
+// OutWithOptions transfers files from a container volume to a host directory using opts.
+func OutWithOptions(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, destDir string, opts Options) error {
 	if _, err := os.Stat(destDir); os.IsNotExist(err) {
 		slog.DebugContext(ctx, "sync dest does not exist, skipping", "path", destDir)
 		return nil
 	}
-	return out(ctx, rt, volumeName, srcPath, destDir)
+	if opts.Snapshot != nil && !opts.ForceSync {
+		conflicts, err := outgoingConflicts(ctx, rt, volumeName, srcPath, opts)
+		if err != nil {
+			return err
+		}
+		if len(conflicts) > 0 {
+			return &ConflictError{Conflicts: conflicts}
+		}
+	}
+	return out(ctx, rt, volumeName, srcPath, destDir, opts)
 }
 
 // OutFile transfers a single-file archive from a container volume to a host file.
 // Unlike Out, it creates the destination file when its parent directory exists.
 func OutFile(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, destFile string) error {
+	return OutFileWithOptions(ctx, rt, volumeName, srcPath, destFile, Options{})
+}
+
+// OutFileWithOptions transfers a single-file archive from a container volume to a host file.
+// Options are accepted for API symmetry with OutWithOptions; single-file sync-out does not use them yet.
+func OutFileWithOptions(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, destFile string, _ Options) error {
 	if err := os.MkdirAll(filepath.Dir(destFile), 0o755); err != nil {
 		return fmt.Errorf("creating file destination parent: %w", err)
 	}
@@ -124,7 +144,31 @@ func outFile(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPa
 	return nil
 }
 
-func out(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, destPath string) error {
+func outgoingConflicts(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath string, opts Options) ([]RootConflict, error) {
+	containerID, cleanup, err := mountVolumeContainer(ctx, rt, volumeName)
+	if err != nil {
+		return nil, fmt.Errorf("mounting volume %s: %w", volumeName, err)
+	}
+	defer cleanup()
+
+	stream, err := rt.CopyFromContainer(ctx, containerID, directoryContentsPath(srcPath))
+	if err != nil {
+		return nil, fmt.Errorf("copying from container for conflict check: %w", err)
+	}
+	defer stream.Close()
+
+	manifest, err := TarManifest(stream, opts)
+	if err != nil {
+		return nil, fmt.Errorf("building outgoing manifest: %w", err)
+	}
+	conflicts, err := DetectRootConflicts(ctx, *opts.Snapshot, manifest)
+	if err != nil {
+		return nil, fmt.Errorf("detecting sync conflicts: %w", err)
+	}
+	return conflicts, nil
+}
+
+func out(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, destPath string, opts Options) error {
 	containerID, cleanup, err := mountVolumeContainer(ctx, rt, volumeName)
 	if err != nil {
 		return fmt.Errorf("mounting volume %s: %w", volumeName, err)
@@ -137,7 +181,7 @@ func out(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, 
 	}
 	defer stream.Close()
 
-	if err := extractTar(stream, destPath); err != nil {
+	if err := extractTar(stream, destPath, opts); err != nil {
 		return fmt.Errorf("extracting tar: %w", err)
 	}
 
@@ -146,6 +190,29 @@ func out(ctx context.Context, rt runtime.ContainerRuntime, volumeName, srcPath, 
 
 func directoryContentsPath(srcPath string) string {
 	return strings.TrimRight(srcPath, "/") + "/."
+}
+
+// TarManifest returns the archive paths that would be written after matcher/internal filtering.
+func TarManifest(r io.Reader, opts Options) (map[string]struct{}, error) {
+	manifest := make(map[string]struct{})
+	tr := tar.NewReader(r)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			return manifest, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading tar: %w", err)
+		}
+		entryName := cleanArchiveEntryName(header.Name)
+		if entryName == "." || entryName == volumeInitializedMarker {
+			continue
+		}
+		if opts.Matcher != nil && opts.Matcher.Match(entryName) {
+			continue
+		}
+		manifest[entryName] = struct{}{}
+	}
 }
 
 // mountVolumeContainer creates a short-lived container with the volume mounted.
@@ -312,10 +379,13 @@ func extractTarToFile(r io.Reader, dest, expectedName string) error {
 
 // extractTar extracts a tar archive to the destination directory or file.
 // Validates that directory extractions stay within dest to prevent path traversal.
-func extractTar(r io.Reader, dest string) error {
-	destInfo, err := os.Stat(dest)
+func extractTar(r io.Reader, dest string, opts Options) error {
+	destInfo, err := os.Lstat(dest)
 	if err != nil {
 		return fmt.Errorf("stat destination: %w", err)
+	}
+	if destInfo.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("destination root is a symlink: %s", dest)
 	}
 	if !destInfo.IsDir() {
 		return extractTarToFile(r, dest, filepath.Base(dest))
@@ -332,12 +402,17 @@ func extractTar(r io.Reader, dest string) error {
 			return fmt.Errorf("reading tar: %w", err)
 		}
 
-		if filepath.Clean(header.Name) == volumeInitializedMarker {
+		entryName := cleanArchiveEntryName(header.Name)
+		if entryName == volumeInitializedMarker {
+			// Internal volume lifecycle marker created during sync-in; never write it back to the host.
+			continue
+		}
+		if opts.Matcher != nil && opts.Matcher.Match(entryName) {
 			continue
 		}
 
-		target := filepath.Join(dest, header.Name)
-		if err := ensurePathStaysInRoot(cleanDest, target, header.Name); err != nil {
+		target := filepath.Join(dest, entryName)
+		if err := ensurePathStaysInRoot(cleanDest, target, entryName); err != nil {
 			return err
 		}
 
@@ -350,6 +425,9 @@ func extractTar(r io.Reader, dest string) error {
 				return fmt.Errorf("mkdir %s: %w", target, err)
 			}
 		case tar.TypeReg:
+			if err := ensurePathHasNoSymlink(cleanDest, filepath.Dir(target)); err != nil {
+				return err
+			}
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return fmt.Errorf("mkdir parent %s: %w", filepath.Dir(target), err)
 			}
@@ -368,6 +446,10 @@ func extractTar(r io.Reader, dest string) error {
 		}
 	}
 	return nil
+}
+
+func cleanArchiveEntryName(name string) string {
+	return filepath.ToSlash(path.Clean(name))
 }
 
 func ensureFileIsNotSymlink(path string) error {

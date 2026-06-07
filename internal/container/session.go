@@ -54,6 +54,11 @@ func NewSession(id string, rt runtime.ContainerRuntime, vols Volumes) *Session {
 // Uses the provided context (typically background) so cleanup runs even if
 // the original context was cancelled.
 func (s *Session) Cleanup(ctx context.Context) {
+	s.CleanupExcept(ctx, nil)
+}
+
+// CleanupExcept removes session resources, preserving named volumes for recovery.
+func (s *Session) CleanupExcept(ctx context.Context, preserveVolumes map[string]bool) {
 	if s.Vol.NetworkID != "" {
 		if err := s.rt.NetworkRemove(ctx, s.Vol.NetworkID); err != nil {
 			slog.WarnContext(ctx, "cleanup: network remove failed",
@@ -61,6 +66,10 @@ func (s *Session) Cleanup(ctx context.Context) {
 		}
 	}
 	for _, name := range s.Vol.NonEmptyNames() {
+		if preserveVolumes[name] {
+			slog.WarnContext(ctx, "cleanup: preserving volume for recovery", "volume", name)
+			continue
+		}
 		if err := s.rt.VolumeRemove(ctx, name, true); err != nil {
 			slog.WarnContext(ctx, "cleanup: volume remove failed",
 				"volume", name, "error", err)

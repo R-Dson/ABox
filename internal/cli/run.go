@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -51,6 +52,13 @@ type ExitError struct {
 
 func (e *ExitError) Error() string {
 	return fmt.Sprintf("exit code %d", e.Code)
+}
+
+func nonZeroExitCode(code int) int {
+	if code != 0 {
+		return code
+	}
+	return 1
 }
 
 // blockedEnvKeys are environment variables that must never be injected
@@ -148,50 +156,54 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 	}
 
 	hasWorkspaceVol := matcher.HasPatterns()
-	snapshotDirs := []string{
-		profile.ConfigFullPath(home),
-		profile.CachePath(home),
-		profile.StatePath(home),
-		profile.SharePath(home),
+	rootSpecs := []sync.RootSpec{
+		{Name: "config", Path: profile.ConfigFullPath(home)},
+		{Name: "cache", Path: profile.CachePath(home)},
+		{Name: "state", Path: profile.StatePath(home)},
+		{Name: "share", Path: profile.SharePath(home)},
 	}
 	if hasWorkspaceVol {
-		snapshotDirs = append(snapshotDirs, workdir)
+		rootSpecs = append(rootSpecs, sync.RootSpec{Name: "workspace", Path: workdir, Matcher: matcher})
 	}
-	snap, err := sync.SnapshotMtimes(snapshotDirs)
+	snapshot, err := sync.SnapshotRoots(ctx, rootSpecs)
 	if err != nil {
-		return fmt.Errorf("snapshotting mtimes: %w", err)
+		return fmt.Errorf("snapshotting roots: %w", err)
+	}
+	snapshotByName := make(map[string]*sync.RootSnapshot, len(snapshot.Roots))
+	for i := range snapshot.Roots {
+		snapshotByName[snapshot.Roots[i].Name] = &snapshot.Roots[i]
 	}
 
 	sess, err := container.CreateSession(ctx, rt, profile, resolvedConfig, hasWorkspaceVol)
 	if err != nil {
 		return fmt.Errorf("creating session: %w", err)
 	}
-	defer sess.Cleanup(context.Background())
+	preserveVolumes := make(map[string]bool)
+	defer func() { sess.CleanupExcept(context.Background(), preserveVolumes) }()
 
-	syncDirs := map[string]string{
-		sess.Vol.ConfigVol: profile.ConfigFullPath(home),
-		sess.Vol.CacheVol:  profile.CachePath(home),
-		sess.Vol.StateVol:  profile.StatePath(home),
-		sess.Vol.ShareVol:  profile.SharePath(home),
+	type sessionSyncRoot struct {
+		name         string
+		volume       string
+		hostPath     string
+		matcher      *exclusion.Matcher
+		configIsFile bool
+	}
+	syncRoots := []sessionSyncRoot{
+		{name: "config", volume: sess.Vol.ConfigVol, hostPath: profile.ConfigFullPath(home), configIsFile: profile.ConfigIsFile},
+		{name: "cache", volume: sess.Vol.CacheVol, hostPath: profile.CachePath(home)},
+		{name: "state", volume: sess.Vol.StateVol, hostPath: profile.StatePath(home)},
+		{name: "share", volume: sess.Vol.ShareVol, hostPath: profile.SharePath(home)},
+	}
+	if sess.Vol.WorkspaceVol != "" {
+		syncRoots = append(syncRoots, sessionSyncRoot{name: "workspace", volume: sess.Vol.WorkspaceVol, hostPath: workdir, matcher: matcher})
 	}
 
 	g, gctx := errgroup.WithContext(ctx)
-	for vol, srcDir := range syncDirs {
-		vol, srcDir := vol, srcDir
+	for _, root := range syncRoots {
+		root := root
 		g.Go(func() error {
-			if err := sync.In(gctx, rt, srcDir, vol, "/data", nil); err != nil {
-				return fmt.Errorf("sync-in %s: %w", srcDir, err)
-			}
-			return nil
-		})
-	}
-
-	// Workspace sync with exclusion filtering
-	if sess.Vol.WorkspaceVol != "" {
-		wsVol := sess.Vol.WorkspaceVol
-		g.Go(func() error {
-			if err := sync.In(gctx, rt, workdir, wsVol, "/data", matcher); err != nil {
-				return fmt.Errorf("workspace sync-in: %w", err)
+			if err := sync.In(gctx, rt, root.hostPath, root.volume, "/data", root.matcher); err != nil {
+				return fmt.Errorf("sync-in %s: %w", root.hostPath, err)
 			}
 			return nil
 		})
@@ -222,39 +234,44 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		return fmt.Errorf("running container: %w", err)
 	}
 
-	if snap != nil {
-		conflicts := snap.DetectConflicts()
-		if len(conflicts) > 0 && !cfg.ForceSync {
-			summary, detail := sync.FormatConflicts(conflicts)
-			slog.WarnContext(ctx, "skipping sync-out: "+summary,
-				"force-sync", cfg.ForceSync)
-			slog.DebugContext(ctx, detail)
-			return &ExitError{Code: exitCode}
+	var rootConflicts []sync.RootConflict
+	var syncOutErr error
+	for _, root := range syncRoots {
+		opts := sync.Options{
+			Matcher:   root.matcher,
+			RootName:  root.name,
+			Snapshot:  snapshotByName[root.name],
+			ForceSync: cfg.ForceSync,
 		}
+		var err error
+		if root.configIsFile {
+			err = sync.OutFileWithOptions(ctx, rt, root.volume, "/data", root.hostPath, opts)
+		} else {
+			err = sync.OutWithOptions(ctx, rt, root.volume, "/data", root.hostPath, opts)
+		}
+		if err == nil {
+			continue
+		}
+		conflictErr, ok := errors.AsType[*sync.ConflictError](err)
+		if !ok {
+			syncOutErr = errors.Join(syncOutErr, fmt.Errorf("sync-out %s: %w", root.hostPath, err))
+			continue
+		}
+		preserveVolumes[root.volume] = true
+		rootConflicts = append(rootConflicts, conflictErr.Conflicts...)
+		summary, detail := sync.FormatRootConflicts(conflictErr.Conflicts)
+		slog.WarnContext(ctx, "skipping conflicted sync-out root: "+summary,
+			"root", root.name,
+			"volume", root.volume,
+			"recovery", "docker volume ls --filter label=app=abox")
+		slog.DebugContext(ctx, detail)
 	}
 
-	if sess.Vol.WorkspaceVol != "" {
-		syncDirs[sess.Vol.WorkspaceVol] = workdir
+	if syncOutErr != nil {
+		return fmt.Errorf("sync-out: %w", syncOutErr)
 	}
-
-	g, gctx = errgroup.WithContext(ctx)
-	for vol, srcDir := range syncDirs {
-		vol, srcDir := vol, srcDir
-		g.Go(func() error {
-			var err error
-			if profile.ConfigIsFile && vol == sess.Vol.ConfigVol {
-				err = sync.OutFile(gctx, rt, vol, "/data", srcDir)
-			} else {
-				err = sync.Out(gctx, rt, vol, "/data", srcDir)
-			}
-			if err != nil {
-				return fmt.Errorf("sync-out %s: %w", srcDir, err)
-			}
-			return nil
-		})
-	}
-	if err := g.Wait(); err != nil {
-		return fmt.Errorf("parallel sync-out: %w", err)
+	if len(rootConflicts) > 0 {
+		return &ExitError{Code: nonZeroExitCode(exitCode)}
 	}
 
 	return &ExitError{Code: exitCode}
