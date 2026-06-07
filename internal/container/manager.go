@@ -2,6 +2,8 @@ package container
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
@@ -23,7 +25,10 @@ import (
 // strict networking. Returns a session that the caller must clean up.
 // If hasWorkspaceVol is true, a 5th workspace volume is created for exclusion-filtered sync.
 func CreateSession(ctx context.Context, rt runtime.ContainerRuntime, profile config.EditorProfile, cfg *config.Config, hasWorkspaceVol bool) (*Session, error) {
-	id := strconv.FormatInt(time.Now().UnixNano(), 10)
+	id, err := newSessionID()
+	if err != nil {
+		return nil, err
+	}
 	vols := Volumes{
 		ConfigVol: "abox-config-" + id,
 		CacheVol:  "abox-cache-" + id,
@@ -73,6 +78,14 @@ func CreateSession(ctx context.Context, rt runtime.ContainerRuntime, profile con
 	}
 
 	return sess, nil
+}
+
+func newSessionID() (string, error) {
+	var suffix [4]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		return "", fmt.Errorf("generating session ID suffix: %w", err)
+	}
+	return strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + hex.EncodeToString(suffix[:]), nil
 }
 
 // bootstrapOwnership runs a short-lived container as root with the sync image

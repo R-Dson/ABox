@@ -3,6 +3,7 @@ package container_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/r-dson/abox/internal/config"
@@ -10,6 +11,20 @@ import (
 	"github.com/r-dson/abox/internal/runtime"
 	"github.com/r-dson/abox/internal/runtimetest"
 )
+
+func TestCreateSession_IDHasRandomSuffix(t *testing.T) {
+	profile := config.EditorProfile{CmdName: "test", ImageTag: "test"}
+	sess, err := container.CreateSession(t.Context(), &runtimetest.StubRuntime{}, profile, &config.Config{}, false)
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	sess.Cleanup(t.Context())
+
+	parts := strings.Split(sess.ID, "-")
+	if len(parts) != 2 || parts[0] == "" || len(parts[1]) < 8 {
+		t.Fatalf("session ID = %q, want timestamp-randomsuffix", sess.ID)
+	}
+}
 
 func TestCreateSession_BootstrapHelperHasSecurityDefaults(t *testing.T) {
 	var bootstrapSpec runtime.ContainerSpec
