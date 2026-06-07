@@ -164,6 +164,64 @@ func TestSyncOut_RejectsTraversalBeforeWrite(t *testing.T) {
 	}
 }
 
+func TestSyncOut_RecreatesSafeRelativeSymlink(t *testing.T) {
+	destDir := t.TempDir()
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+	mustTarWrite(t, tw, &tar.Header{Name: "target.txt", Mode: 0o644, Size: int64(len("target"))}, []byte("target"))
+	if err := tw.WriteHeader(&tar.Header{Name: "link", Typeflag: tar.TypeSymlink, Linkname: "target.txt", Mode: 0o777}); err != nil {
+		t.Fatalf("tar write symlink header: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("closing tar writer: %v", err)
+	}
+
+	stub := &runtimetest.StubRuntime{
+		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(tarBuf.Bytes())), nil
+		},
+	}
+
+	if err := syncpkg.Out(t.Context(), stub, "test-vol", "/workspace", destDir); err != nil {
+		t.Fatalf("Out() error: %v", err)
+	}
+	linkTarget, err := os.Readlink(filepath.Join(destDir, "link"))
+	if err != nil {
+		t.Fatalf("reading symlink: %v", err)
+	}
+	if linkTarget != "target.txt" {
+		t.Fatalf("link target = %q, want target.txt", linkTarget)
+	}
+}
+
+func TestSyncOut_RejectsEscapingSymlink(t *testing.T) {
+	destDir := t.TempDir()
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+	if err := tw.WriteHeader(&tar.Header{Name: "link", Typeflag: tar.TypeSymlink, Linkname: "../outside.txt", Mode: 0o777}); err != nil {
+		t.Fatalf("tar write symlink header: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("closing tar writer: %v", err)
+	}
+
+	stub := &runtimetest.StubRuntime{
+		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(tarBuf.Bytes())), nil
+		},
+	}
+
+	err := syncpkg.Out(t.Context(), stub, "test-vol", "/workspace", destDir)
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("Out() error = %v, want symlink rejection", err)
+	}
+	if _, err := os.Lstat(filepath.Join(destDir, "link")); !os.IsNotExist(err) {
+		t.Fatalf("escaping symlink should not be created, stat error = %v", err)
+	}
+}
+
 func TestSyncOut_ExtractsTarToHost(t *testing.T) {
 	destDir := t.TempDir()
 

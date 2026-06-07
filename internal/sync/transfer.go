@@ -249,7 +249,6 @@ func mountVolumeContainer(ctx context.Context, rt runtime.ContainerRuntime, volu
 // If matcher is nil, all files are included.
 func TarFiltered(dir string, w io.Writer, matcher *exclusion.Matcher) error {
 	tw := tar.NewWriter(w)
-	defer tw.Close()
 
 	rootInfo, err := os.Lstat(dir)
 	if err != nil {
@@ -261,6 +260,9 @@ func TarFiltered(dir string, w io.Writer, matcher *exclusion.Matcher) error {
 		}
 		if err := writeTarFile(tw, dir, filepath.Base(dir)); err != nil {
 			return err
+		}
+		if err := tw.Close(); err != nil {
+			return fmt.Errorf("closing tar writer: %w", err)
 		}
 		return nil
 	}
@@ -292,13 +294,13 @@ func TarFiltered(dir string, w io.Writer, matcher *exclusion.Matcher) error {
 			return nil
 		}
 
-		if d.IsDir() {
-			return nil
-		}
-
 		return writeTarFile(tw, path, rel)
 	}); err != nil {
+		_ = tw.Close()
 		return fmt.Errorf("walking directory: %w", err)
+	}
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("closing tar writer: %w", err)
 	}
 	return nil
 }
@@ -326,7 +328,7 @@ func writeTarFile(tw *tar.Writer, filePath, name string) error {
 	if err := tw.WriteHeader(header); err != nil {
 		return fmt.Errorf("write header: %w", err)
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
+	if info.Mode()&os.ModeSymlink != 0 || info.IsDir() {
 		return nil
 	}
 
@@ -439,10 +441,25 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 				return fmt.Errorf("create %s: %w", target, err)
 			}
 			if _, err := io.Copy(f, tr); err != nil {
-				f.Close()
+				_ = f.Close()
 				return fmt.Errorf("write %s: %w", target, err)
 			}
-			f.Close()
+			if err := f.Close(); err != nil {
+				return fmt.Errorf("close %s: %w", target, err)
+			}
+		case tar.TypeSymlink:
+			if err := ensureSafeSymlink(cleanDest, target, header.Linkname); err != nil {
+				return err
+			}
+			if err := ensurePathHasNoSymlink(cleanDest, filepath.Dir(target)); err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return fmt.Errorf("mkdir parent %s: %w", filepath.Dir(target), err)
+			}
+			if err := os.Symlink(header.Linkname, target); err != nil {
+				return fmt.Errorf("create symlink %s: %w", target, err)
+			}
 		}
 	}
 	return nil
@@ -450,6 +467,20 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 
 func cleanArchiveEntryName(name string) string {
 	return filepath.ToSlash(path.Clean(name))
+}
+
+func ensureSafeSymlink(root, linkPath, linkTarget string) error {
+	if linkTarget == "" {
+		return fmt.Errorf("refusing empty symlink target for %s", linkPath)
+	}
+	if filepath.IsAbs(linkTarget) {
+		return fmt.Errorf("refusing absolute symlink %s -> %s", linkPath, linkTarget)
+	}
+	resolvedTarget := filepath.Join(filepath.Dir(linkPath), filepath.FromSlash(linkTarget))
+	if err := ensurePathStaysInRoot(root, resolvedTarget, linkTarget); err != nil {
+		return fmt.Errorf("refusing escaping symlink %s -> %s: %w", linkPath, linkTarget, err)
+	}
+	return nil
 }
 
 func ensureFileIsNotSymlink(path string) error {

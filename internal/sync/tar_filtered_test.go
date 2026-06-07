@@ -112,6 +112,22 @@ func TestTarFiltered_NilMatcherIncludesAll(t *testing.T) {
 	}
 }
 
+func TestTarFiltered_EmitsEmptyDirectoryHeaders(t *testing.T) {
+	dir := t.TempDir()
+	mustMkdirAll(t, filepath.Join(dir, "empty"))
+	mustMkdirAll(t, filepath.Join(dir, "nested", "empty"))
+
+	buf := new(bytes.Buffer)
+	if err := syncpkg.TarFiltered(dir, buf, nil); err != nil {
+		t.Fatalf("TarFiltered() error: %v", err)
+	}
+
+	entries := readTarHeaders(t, buf)
+	assertTarHeaderType(t, entries, "empty", tar.TypeDir)
+	assertTarHeaderType(t, entries, "nested", tar.TypeDir)
+	assertTarHeaderType(t, entries, "nested/empty", tar.TypeDir)
+}
+
 func TestTarFiltered_EmptyDirProducesEmptyTar(t *testing.T) {
 	dir := t.TempDir()
 
@@ -125,6 +141,35 @@ func TestTarFiltered_EmptyDirProducesEmptyTar(t *testing.T) {
 	_, err = tr.Next()
 	if err != io.EOF {
 		t.Errorf("empty dir should produce empty tar, got %v", err)
+	}
+}
+
+func readTarHeaders(t *testing.T, buf *bytes.Buffer) map[string]*tar.Header {
+	t.Helper()
+	entries := map[string]*tar.Header{}
+	tr := tar.NewReader(bytes.NewReader(buf.Bytes()))
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("reading tar: %v", err)
+		}
+		header := *h
+		entries[h.Name] = &header
+	}
+	return entries
+}
+
+func assertTarHeaderType(t *testing.T, entries map[string]*tar.Header, name string, want byte) {
+	t.Helper()
+	header, ok := entries[name]
+	if !ok {
+		t.Fatalf("missing tar entry %q", name)
+	}
+	if header.Typeflag != want {
+		t.Fatalf("%s entry type = %v, want %v", name, header.Typeflag, want)
 	}
 }
 
