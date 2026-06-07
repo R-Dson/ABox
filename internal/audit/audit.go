@@ -2,7 +2,9 @@ package audit
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -19,7 +21,10 @@ const (
 	Warn Status = "warn"
 )
 
-var secureHomeDirFunc = osutil.SystemHomeDir
+var (
+	secureHomeDirFunc = osutil.SystemHomeDir
+	walkDirFunc       = filepath.WalkDir
+)
 
 // Check represents a single audit finding.
 type Check struct {
@@ -34,12 +39,18 @@ type Result struct {
 }
 
 // Run executes all audit checks and returns the result.
-func Run(_ context.Context, workdir string) (*Result, error) {
+func Run(ctx context.Context, workdir string) (*Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("audit context: %w", err)
+	}
 	result := &Result{}
 
 	result.Checks = append(result.Checks, checkWorkdirSafety(workdir))
 
-	sensitiveStatus, sensitivePath := checkSensitiveFiles(workdir)
+	sensitiveStatus, sensitivePath, err := checkSensitiveFiles(ctx, workdir)
+	if err != nil {
+		return nil, err
+	}
 	result.Checks = append(result.Checks, Check{
 		Name:   "sensitive_files",
 		Status: sensitiveStatus,
@@ -84,15 +95,31 @@ func checkWorkdirSafety(workdir string) Check {
 
 // CheckSensitiveFiles returns Warn if known sensitive files exist in workdir.
 func CheckSensitiveFiles(workdir string) Status {
-	status, _ := checkSensitiveFiles(workdir)
+	status, _, _ := checkSensitiveFiles(context.Background(), workdir)
 	return status
 }
 
-func checkSensitiveFiles(workdir string) (Status, string) {
+func checkSensitiveFiles(ctx context.Context, workdir string) (Status, string, error) {
+	if err := ctx.Err(); err != nil {
+		return Pass, "", fmt.Errorf("audit context: %w", err)
+	}
 	matcher := exclusion.NewMatcher(exclusion.HardcodedPatterns())
 	var found string
-	_ = filepath.WalkDir(workdir, func(path string, entry os.DirEntry, err error) error {
-		if err != nil || found != "" || entry.IsDir() {
+	if err := walkDirFunc(workdir, func(path string, entry os.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("audit context: %w", err)
+		}
+		if found != "" {
+			return nil
+		}
+		if walkErr != nil {
+			if errors.Is(walkErr, fs.ErrPermission) {
+				found = path
+				return nil
+			}
+			return nil
+		}
+		if entry.IsDir() {
 			return nil
 		}
 		rel, err := filepath.Rel(workdir, path)
@@ -103,9 +130,11 @@ func checkSensitiveFiles(workdir string) (Status, string) {
 			found = path
 		}
 		return nil
-	})
-	if found != "" {
-		return Warn, found
+	}); err != nil {
+		return Pass, "", fmt.Errorf("walking workspace for sensitive files: %w", err)
 	}
-	return Pass, ""
+	if found != "" {
+		return Warn, found, nil
+	}
+	return Pass, "", nil
 }
