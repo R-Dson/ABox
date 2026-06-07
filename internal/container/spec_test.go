@@ -128,6 +128,26 @@ func TestBuildSpec_EditorDataMountTargets(t *testing.T) {
 	}
 }
 
+func TestBuildSpec_GitconfigNotMountedByDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[credential]\n\thelper = store\n"), 0o600); err != nil {
+		t.Fatalf("creating .gitconfig fixture: %v", err)
+	}
+
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{})
+
+	for _, bind := range spec.Binds {
+		if strings.Contains(bind, ".gitconfig") {
+			t.Fatalf("host .gitconfig must not be mounted by default: %q", bind)
+		}
+	}
+}
+
 func TestBuildSpec_DoesNotMountSSHDirectoryFallback(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

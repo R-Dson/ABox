@@ -126,7 +126,6 @@ func buildEnv(profile config.EditorProfile, shouldForwardSSHAgent bool) []string
 }
 
 func buildBinds(profile config.EditorProfile, sess *Session, workdir string, shouldForwardSSHAgent bool) []string {
-	home := config.HomeDir()
 	configMountPath := profile.ConfigFullPath(containerHomeDir)
 	if profile.ConfigIsFile {
 		configMountPath = fileConfigVolumePath
@@ -147,10 +146,6 @@ func buildBinds(profile config.EditorProfile, sess *Session, workdir string, sho
 		binds = append(binds, sess.Vol.WorkspaceVol+":"+containerWorkDir)
 	} else {
 		binds = append(binds, workdir+":"+containerWorkDir)
-	}
-
-	if gitConfig := filepath.Join(home, ".gitconfig"); fileExists(gitConfig) {
-		binds = append(binds, gitConfig+":"+filepath.Join(containerHomeDir, ".gitconfig")+":"+readOnlyBindFlags)
 	}
 
 	if shouldForwardSSHAgent {
@@ -175,11 +170,6 @@ func sshAgentSocket() string {
 		return ""
 	}
 	return sock
-}
-
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }
 
 func parseMemoryBytes(s string) (int64, error) {
