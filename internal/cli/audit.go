@@ -25,10 +25,12 @@ func newAuditCmd() *cobra.Command {
 			}
 
 			w := cmd.OutOrStdout()
+			hasFailure := false
 			for _, check := range result.Checks {
 				icon := "✓"
 				if check.Status == audit.Fail {
 					icon = "✗"
+					hasFailure = true
 				} else if check.Status == audit.Warn {
 					icon = "⚠"
 				}
@@ -37,6 +39,9 @@ func newAuditCmd() *cobra.Command {
 					fmt.Fprintf(w, ": %s", check.Detail)
 				}
 				fmt.Fprintln(w)
+			}
+			if hasFailure {
+				return fmt.Errorf("audit failed")
 			}
 			return nil
 		},

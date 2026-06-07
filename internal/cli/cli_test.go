@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/r-dson/abox/internal/cli"
@@ -31,6 +32,24 @@ func TestRootCmd_HasRunFlags(t *testing.T) {
 				t.Errorf("flag --%s not found on root", tt.flag)
 			}
 		})
+	}
+}
+
+func TestAuditReturnsNonZeroOnFail(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	buf := new(bytes.Buffer)
+	root := cli.NewRootCmd("test")
+	root.SetArgs([]string{"audit", home})
+	root.SetOut(buf)
+	root.SetErr(buf)
+
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "audit failed") {
+		t.Fatalf("audit error = %v, want audit failed", err)
+	}
+	if !strings.Contains(buf.String(), "✗ workdir_safety") {
+		t.Fatalf("audit output = %q, want failed workdir_safety detail", buf.String())
 	}
 }
 
