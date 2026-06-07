@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -12,7 +13,10 @@ import (
 // NewPodman creates a runtime connected to the Podman socket.
 // Podman's REST API is Docker-compatible, so we reuse the Docker client.
 func NewPodman(ctx context.Context) (ContainerRuntime, error) {
-	sock := podmanSocket()
+	sock, err := podmanSocket()
+	if err != nil {
+		return nil, err
+	}
 	cli, err := dockerclient.NewClientWithOpts(
 		dockerclient.WithHost("unix://"+sock),
 		dockerclient.WithAPIVersionNegotiation(),
@@ -26,9 +30,19 @@ func NewPodman(ctx context.Context) (ContainerRuntime, error) {
 	return &dockerRuntime{client: cli}, nil
 }
 
-func podmanSocket() string {
-	if s := os.Getenv("DOCKER_HOST"); s != "" {
-		return strings.TrimPrefix(s, "unix://")
+func podmanSocket() (string, error) {
+	if s := os.Getenv("PODMAN_HOST"); s != "" {
+		if strings.HasPrefix(s, "/") {
+			return s, nil
+		}
+		u, err := url.Parse(s)
+		if err != nil {
+			return "", fmt.Errorf("parsing PODMAN_HOST: %w", err)
+		}
+		if u.Scheme != "unix" {
+			return "", fmt.Errorf("unsupported PODMAN_HOST scheme %q", u.Scheme)
+		}
+		return strings.TrimPrefix(s, "unix://"), nil
 	}
-	return fmt.Sprintf("/run/user/%d/podman/podman.sock", os.Getuid())
+	return fmt.Sprintf("/run/user/%d/podman/podman.sock", os.Getuid()), nil
 }
