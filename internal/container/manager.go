@@ -334,8 +334,11 @@ func forwardContainerSignals(ctx context.Context, rt runtime.ContainerRuntime, i
 		}
 	}()
 
+	var once sync.Once
 	return func() {
-		close(done)
+		once.Do(func() {
+			close(done)
+		})
 	}
 }
 

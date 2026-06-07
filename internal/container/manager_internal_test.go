@@ -93,6 +93,12 @@ func TestForwardContainerSignal(t *testing.T) {
 	}
 }
 
+func TestForwardContainerSignals_StopIsIdempotent(t *testing.T) {
+	stop := forwardContainerSignals(t.Context(), &runtimetest.StubRuntime{}, "c-1", make(chan os.Signal))
+	stop()
+	stop()
+}
+
 func TestStopForwardedSignalsRunsBothCleanupCallbacks(t *testing.T) {
 	stoppedOSSignals := false
 	stoppedForwarder := false
