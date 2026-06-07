@@ -69,14 +69,16 @@ func TestRunSession_CleansUpOnVolumeFailure(t *testing.T) {
 	rec := newCallRecorder()
 	rec.failOn = "VolumeCreate"
 
-	_ = cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
+	err := cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
 		Editor: "opencode",
 	})
+	if err == nil {
+		t.Fatal("RunSession() error = nil, want volume create error")
+	}
 
-	calls := rec.methods()
-	removes := filter(calls, "VolumeRemove")
-	if len(removes) == 0 && len(filter(calls, "VolumeCreate")) > 0 {
-		t.Error("expected VolumeRemove calls to clean up after VolumeCreate failure")
+	removes := filter(rec.methods(), "VolumeRemove")
+	if len(removes) != 0 {
+		t.Fatalf("VolumeRemove calls = %v, want none when no volumes were created", removes)
 	}
 }
 

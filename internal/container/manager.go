@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -45,15 +46,23 @@ func CreateSession(ctx context.Context, rt runtime.ContainerRuntime, profile con
 	}
 
 	// Create volumes in parallel
+	var createdMu sync.Mutex
+	created := map[string]bool{}
 	g, gctx := errgroup.WithContext(ctx)
 	for _, name := range vols.NonEmptyNames() {
 		name := name
 		g.Go(func() error {
-			return rt.VolumeCreate(gctx, name, labels)
+			if err := rt.VolumeCreate(gctx, name, labels); err != nil {
+				return err
+			}
+			createdMu.Lock()
+			created[name] = true
+			createdMu.Unlock()
+			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
-		sess := NewSession(id, rt, vols)
+		sess := NewSession(id, rt, createdVolumeSubset(vols, created))
 		sess.Cleanup(ctx)
 		return nil, fmt.Errorf("creating volumes: %w", err)
 	}
@@ -78,6 +87,23 @@ func CreateSession(ctx context.Context, rt runtime.ContainerRuntime, profile con
 	}
 
 	return sess, nil
+}
+
+func createdVolumeSubset(vols Volumes, created map[string]bool) Volumes {
+	return Volumes{
+		ConfigVol:    createdName(vols.ConfigVol, created),
+		CacheVol:     createdName(vols.CacheVol, created),
+		StateVol:     createdName(vols.StateVol, created),
+		ShareVol:     createdName(vols.ShareVol, created),
+		WorkspaceVol: createdName(vols.WorkspaceVol, created),
+	}
+}
+
+func createdName(name string, created map[string]bool) string {
+	if created[name] {
+		return name
+	}
+	return ""
 }
 
 func newSessionID() (string, error) {

@@ -2,6 +2,7 @@ package container_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -56,6 +57,31 @@ func TestCreateSession_BootstrapHelperHasSecurityDefaults(t *testing.T) {
 	}
 	if bootstrapSpec.Memory == 0 || bootstrapSpec.NanoCPUs == 0 {
 		t.Fatalf("bootstrap helper resources = memory %d nanoCPUs %d, want bounded", bootstrapSpec.Memory, bootstrapSpec.NanoCPUs)
+	}
+}
+
+func TestVolumes_CleanupOnCreateErrorRemovesCreatedVolumes(t *testing.T) {
+	var removed []string
+	stub := &runtimetest.StubRuntime{
+		VolumeCreateFn: func(_ context.Context, name string, _ map[string]string) error {
+			if strings.Contains(name, "config") {
+				return nil
+			}
+			return errors.New("create failed")
+		},
+		VolumeRemoveFn: func(_ context.Context, name string, _ bool) error {
+			removed = append(removed, name)
+			return nil
+		},
+	}
+	profile := config.EditorProfile{CmdName: "test", ImageTag: "test"}
+
+	_, err := container.CreateSession(t.Context(), stub, profile, &config.Config{}, false)
+	if err == nil {
+		t.Fatal("CreateSession() error = nil, want volume create error")
+	}
+	if len(removed) != 1 || !strings.Contains(removed[0], "config") {
+		t.Fatalf("removed volumes = %v, want only created config volume", removed)
 	}
 }
 
