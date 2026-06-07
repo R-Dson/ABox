@@ -182,12 +182,29 @@ func (d *dockerRuntime) ContainerStart(ctx context.Context, id string) error {
 
 func (d *dockerRuntime) ContainerWait(ctx context.Context, id string) (int64, error) {
 	statusCh, errCh := d.client.ContainerWait(ctx, id, dockercontainer.WaitConditionNotRunning)
-	select {
-	case err := <-errCh:
-		return -1, err
-	case status := <-statusCh:
-		return status.StatusCode, nil
+	return waitForContainerStatus(id, statusCh, errCh)
+}
+
+func waitForContainerStatus(id string, statusCh <-chan dockercontainer.WaitResponse, errCh <-chan error) (int64, error) {
+	for statusCh != nil || errCh != nil {
+		select {
+		case err, ok := <-errCh:
+			if !ok {
+				errCh = nil
+				continue
+			}
+			if err != nil {
+				return -1, fmt.Errorf("waiting for container %s: %w", id, err)
+			}
+		case status, ok := <-statusCh:
+			if !ok {
+				statusCh = nil
+				continue
+			}
+			return status.StatusCode, nil
+		}
 	}
+	return -1, fmt.Errorf("waiting for container %s: wait channels closed", id)
 }
 
 func (d *dockerRuntime) ContainerRemove(ctx context.Context, id string, force bool) error {

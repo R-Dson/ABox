@@ -2,11 +2,14 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	dockercontainer "github.com/docker/docker/api/types/container"
 )
 
 func TestNormalizeSecurityOptInlinesSeccompProfilePath(t *testing.T) {
@@ -37,6 +40,36 @@ func TestNormalizeSecurityOptLeavesInlineSeccompAndUnconfined(t *testing.T) {
 		if got[i] != opts[i] {
 			t.Fatalf("normalizeSecurityOpt()[%d] = %q, want %q", i, got[i], opts[i])
 		}
+	}
+}
+
+func TestContainerWait_WrapsErrorWithContainerID(t *testing.T) {
+	wantErr := errors.New("daemon failed")
+	statusCh := make(<-chan dockercontainer.WaitResponse)
+	errCh := make(chan error, 1)
+	errCh <- wantErr
+
+	_, err := waitForContainerStatus("container-123", statusCh, errCh)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("waitForContainerStatus() error = %v, want wrapped daemon error", err)
+	}
+	if !strings.Contains(err.Error(), "container-123") {
+		t.Fatalf("wait error = %q, want container ID", err)
+	}
+}
+
+func TestContainerWait_IgnoresClosedNilErrChannelUntilStatus(t *testing.T) {
+	statusCh := make(chan dockercontainer.WaitResponse, 1)
+	statusCh <- dockercontainer.WaitResponse{StatusCode: 23}
+	errCh := make(chan error)
+	close(errCh)
+
+	code, err := waitForContainerStatus("container-123", statusCh, errCh)
+	if err != nil {
+		t.Fatalf("waitForContainerStatus() error = %v", err)
+	}
+	if code != 23 {
+		t.Fatalf("exit code = %d, want 23", code)
 	}
 }
 
