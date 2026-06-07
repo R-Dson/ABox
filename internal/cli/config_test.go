@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/r-dson/abox/internal/cli"
@@ -51,6 +52,29 @@ func TestConfigCmd_SetEditor(t *testing.T) {
 	}
 	if !bytes.Contains(data, []byte(`"editor": "claude"`)) {
 		t.Errorf("config does not contain editor setting: %s", data)
+	}
+}
+
+func TestWriteConfigField_ReadErrorDoesNotOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+	if err := os.Mkdir(cfgPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	root := cli.NewRootCmd("test")
+	root.SetArgs([]string{"config", "set-editor", "claude", "--config", cfgPath})
+
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "reading config") {
+		t.Fatalf("set-editor error = %v, want reading config", err)
+	}
+	info, err := os.Stat(cfgPath)
+	if err != nil {
+		t.Fatalf("stat config path: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal("config path was overwritten")
 	}
 }
 

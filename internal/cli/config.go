@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -88,7 +89,11 @@ func writeConfigField(path, key, value string) error {
 	}
 
 	data := map[string]any{}
-	if existing, err := os.ReadFile(path); err == nil {
+	existing, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("reading config: %w", err)
+	}
+	if err == nil {
 		if err := json.Unmarshal(existing, &data); err != nil {
 			return fmt.Errorf("parsing config: %w", err)
 		}
