@@ -53,6 +53,23 @@ func TestAuditReturnsNonZeroOnFail(t *testing.T) {
 	}
 }
 
+func TestCompletionValidArgs(t *testing.T) {
+	root := cli.NewRootCmd("test")
+	completion, _, err := root.Find([]string{"completion"})
+	if err != nil {
+		t.Fatalf("finding completion command: %v", err)
+	}
+	want := []string{"bash", "zsh", "fish", "powershell"}
+	if len(completion.ValidArgs) != len(want) {
+		t.Fatalf("ValidArgs = %v, want %v", completion.ValidArgs, want)
+	}
+	for i := range want {
+		if completion.ValidArgs[i] != want[i] {
+			t.Fatalf("ValidArgs = %v, want %v", completion.ValidArgs, want)
+		}
+	}
+}
+
 func TestRootCmd_HasSubcommands(t *testing.T) {
 	root := cli.NewRootCmd("test")
 
