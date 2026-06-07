@@ -54,6 +54,25 @@ func TestConfigCmd_SetEditor(t *testing.T) {
 	}
 }
 
+func TestWriteConfigField_Mode0600(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+
+	root := cli.NewRootCmd("test")
+	root.SetArgs([]string{"config", "set-editor", "claude", "--config", cfgPath})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("set-editor error: %v", err)
+	}
+	info, err := os.Stat(cfgPath)
+	if err != nil {
+		t.Fatalf("stat config: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("config mode = %04o, want 0600", got)
+	}
+}
+
 func TestConfigCmd_SetEditor_PreservesTypedFields(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json")

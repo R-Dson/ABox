@@ -100,7 +100,7 @@ func writeConfigField(path, key, value string) error {
 		return fmt.Errorf("encoding config: %w", err)
 	}
 
-	if err := os.WriteFile(path, out, 0o644); err != nil {
+	if err := os.WriteFile(path, out, 0o600); err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}
 	return nil
