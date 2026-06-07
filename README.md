@@ -27,7 +27,10 @@
 
 ## Prerequisites
 
-ABox requires Docker or Podman to be installed and running.
+ABox requires:
+
+- Docker or Podman installed and running.
+- Go 1.26 or newer for local development and validation.
 
 By default, ABox does **not** pull container images automatically. Pull/build the required images ahead of time, or set `pull_policy` to `missing` or `always` when you want ABox to pull images.
 
@@ -64,8 +67,9 @@ abx /path/to/project
 | `--strict-network` | Use an internal container network |
 | `--no-internet` | Disable container networking and reject host network fetches such as `--exclude-url` |
 | `--force-sync` | Overwrite host files even if modified during the session |
-| `--ssh-agent` | Forward the host SSH agent into the container |
-| `--exclude-url <url>` | Fetch additional exclusion patterns from a remote URL |
+| `--ssh-agent` | Forward the host SSH agent socket into the container when it is a real Unix socket |
+| `--trust-workspace-env` | Allow workspace `.abxenv` to request host environment variables for this run |
+| `--exclude-url <url>` | Fetch additional exclusion patterns from an HTTPS remote URL |
 | `--env KEY=VALUE` | Pass an environment variable to the container (repeatable) |
 | `--verbose` | Enable debug logging to `~/.local/state/abx/abx.log` |
 | `--json-logs` | Emit JSON structured logs to stderr |
@@ -144,6 +148,8 @@ Config file: `~/.config/abx/config.json`
   "strict_network": false,
   "no_internet": false,
   "forward_ssh_agent": false,
+  "forward_git_config": false,
+  "trust_workspace_env": false,
   "verbose": false,
   "json_logs": false
 }
@@ -156,6 +162,8 @@ ABX_EDITOR=claude abx
 ABX_PULL_POLICY=missing abx
 ```
 
+Supported overrides include `ABX_EDITOR`, `ABX_EXCLUDE_URL`, `ABX_NO_INTERNET`, `ABX_STRICT_NETWORK`, `ABX_PULL_POLICY`, `ABX_MEMORY_LIMIT`, `ABX_CPU_LIMIT`, `ABX_FORWARD_SSH_AGENT`, `ABX_FORWARD_GIT_CONFIG`, `ABX_TRUST_WORKSPACE_ENV`, `ABX_VERBOSE`, and `ABX_JSON_LOGS`.
+
 `pull_policy` supports:
 
 | Value | Behavior |
@@ -166,14 +174,20 @@ ABX_PULL_POLICY=missing abx
 
 ### Environment Injection
 
-Create `.abxenv` in the workspace to pass selected host environment variables into the container:
+Workspace `.abxenv` files are disabled by default. Use `--trust-workspace-env`, `trust_workspace_env=true`, or `ABX_TRUST_WORKSPACE_ENV=true` only for workspaces you trust.
+
+When enabled, create `.abxenv` in the workspace to request selected host environment variables for the container:
 
 ```text
 ANTHROPIC_API_KEY
 OPENAI_API_KEY
 ```
 
-ABox resolves values from the host environment. Dangerous runtime keys such as `PATH`, `HOME`, `USER`, `SHELL`, `PWD`, and display/session variables are blocked.
+ABox resolves values from the host environment. Values written directly in `.abxenv` are ignored; the file is an allowlist of host variable names. Dangerous runtime keys such as `PATH`, `HOME`, `USER`, `SHELL`, `PWD`, and display/session variables are blocked.
+
+### Editor registry source of truth
+
+The canonical editor registry is `config/editors.json`. The embedded Go registry at `internal/config/editors.json` and the legacy bundle copy at `bin/editors.json` must match it after JSON normalization. The Go test suite includes a drift check for these copies.
 
 ## Development
 
