@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 )
 
 //go:embed editors.json
@@ -53,13 +54,29 @@ type EditorRegistry struct {
 	profiles map[string]EditorProfile
 }
 
+var loadEditorRegistry = sync.OnceValues(loadEmbeddedEditorRegistry)
+
 // LoadEditorRegistry parses the embedded editors.json and returns a registry.
 func LoadEditorRegistry() (*EditorRegistry, error) {
+	return loadEditorRegistry()
+}
+
+func loadEmbeddedEditorRegistry() (*EditorRegistry, error) {
 	var f editorsFile
 	if err := json.Unmarshal(editorsJSON, &f); err != nil {
 		return nil, fmt.Errorf("parsing embedded editors.json: %w", err)
 	}
-	return &EditorRegistry{profiles: f.Editors}, nil
+	if len(f.Editors) == 0 {
+		return nil, fmt.Errorf("embedded editors.json has no editors")
+	}
+	profiles := make(map[string]EditorProfile, len(f.Editors))
+	for name, profile := range f.Editors {
+		if profile.ImageTag == "" || profile.CmdName == "" || profile.ConfigPath == "" || profile.EnvVars == nil {
+			return nil, fmt.Errorf("editor %q missing required fields", name)
+		}
+		profiles[name] = cloneEditorProfile(profile)
+	}
+	return &EditorRegistry{profiles: profiles}, nil
 }
 
 // Get returns the EditorProfile for the named editor.
@@ -68,7 +85,16 @@ func (r *EditorRegistry) Get(name string) (EditorProfile, error) {
 	if !ok {
 		return EditorProfile{}, fmt.Errorf("unknown editor %q (available: %v)", name, r.Names())
 	}
-	return p, nil
+	return cloneEditorProfile(p), nil
+}
+
+func cloneEditorProfile(p EditorProfile) EditorProfile {
+	if p.EnvVars != nil {
+		envVars := make([]string, len(p.EnvVars))
+		copy(envVars, p.EnvVars)
+		p.EnvVars = envVars
+	}
+	return p
 }
 
 // Names returns all editor names sorted alphabetically.

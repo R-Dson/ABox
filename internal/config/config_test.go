@@ -34,6 +34,45 @@ func TestLoadEditorRegistry(t *testing.T) {
 	}
 }
 
+func TestEditorRegistry_ValidatesNonEmptyAndRequiredFields(t *testing.T) {
+	registry, err := config.LoadEditorRegistry()
+	if err != nil {
+		t.Fatalf("LoadEditorRegistry() error: %v", err)
+	}
+	if len(registry.Names()) == 0 {
+		t.Fatal("registry is empty")
+	}
+	for _, name := range registry.Names() {
+		profile, err := registry.Get(name)
+		if err != nil {
+			t.Fatalf("Get(%q) error: %v", name, err)
+		}
+		if profile.ImageTag == "" || profile.CmdName == "" || profile.ConfigPath == "" || profile.EnvVars == nil {
+			t.Fatalf("profile %q missing required fields: %+v", name, profile)
+		}
+	}
+}
+
+func TestEditorRegistry_CachesAndReturnsDefensiveCopies(t *testing.T) {
+	registry, err := config.LoadEditorRegistry()
+	if err != nil {
+		t.Fatalf("LoadEditorRegistry() error: %v", err)
+	}
+	profile, err := registry.Get("claude")
+	if err != nil {
+		t.Fatalf("Get() error: %v", err)
+	}
+	profile.EnvVars[0] = "MUTATED"
+
+	profileAgain, err := registry.Get("claude")
+	if err != nil {
+		t.Fatalf("Get() second error: %v", err)
+	}
+	if profileAgain.EnvVars[0] == "MUTATED" {
+		t.Fatal("registry returned shared EnvVars slice")
+	}
+}
+
 func TestEditorRegistry_Names(t *testing.T) {
 	registry, err := config.LoadEditorRegistry()
 	if err != nil {
