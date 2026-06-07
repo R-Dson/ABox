@@ -117,7 +117,10 @@ func dockerCreateConfigs(spec ContainerSpec) (*dockercontainer.Config, *dockerco
 		AttachStderr: true,
 	}
 
-	mounts := make([]dockermount.Mount, 0, len(spec.Binds))
+	mounts := make([]dockermount.Mount, 0, len(spec.Mounts)+len(spec.Binds))
+	for _, mount := range spec.Mounts {
+		mounts = append(mounts, dockerMountFromSpec(mount))
+	}
 	for _, bind := range spec.Binds {
 		src, dst, opts := parseBind(bind)
 
@@ -175,6 +178,23 @@ func dockerCreateConfigs(spec ContainerSpec) (*dockercontainer.Config, *dockerco
 		hostConfig.NanoCPUs = spec.NanoCPUs
 	}
 	return containerConfig, hostConfig, nil
+}
+
+func dockerMountFromSpec(mount Mount) dockermount.Mount {
+	mountType := dockermount.TypeBind
+	if mount.Type == MountTypeVolume {
+		mountType = dockermount.TypeVolume
+	}
+	dockerMount := dockermount.Mount{
+		Type:     mountType,
+		Source:   mount.Source,
+		Target:   mount.Target,
+		ReadOnly: mount.ReadOnly,
+	}
+	if mountType == dockermount.TypeVolume {
+		dockerMount.VolumeOptions = &dockermount.VolumeOptions{NoCopy: mount.NoCopy}
+	}
+	return dockerMount
 }
 
 func normalizeSecurityOpt(opts []string) ([]string, error) {

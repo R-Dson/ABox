@@ -8,6 +8,25 @@ import (
 // SyncImage is the lightweight Alpine image used for sync and bootstrap operations.
 const SyncImage = "ghcr.io/r-dson/abox:sync"
 
+// MountType identifies how a mount source should be interpreted.
+type MountType string
+
+const (
+	// MountTypeBind mounts a host path into the container.
+	MountTypeBind MountType = "bind"
+	// MountTypeVolume mounts a named volume into the container.
+	MountTypeVolume MountType = "volume"
+)
+
+// Mount describes a typed container mount.
+type Mount struct {
+	Type     MountType
+	Source   string
+	Target   string
+	ReadOnly bool
+	NoCopy   bool
+}
+
 // ContainerSpec holds the typed specification for creating a container.
 type ContainerSpec struct {
 	// Name is the container name.
@@ -26,8 +45,10 @@ type ContainerSpec struct {
 	Tty bool
 	// OpenStdin keeps stdin open.
 	OpenStdin bool
-	// Binds are the volume mount specifications (-v flags).
+	// Binds are legacy Docker-style volume mount specifications (-v flags).
 	Binds []string
+	// Mounts are typed mounts whose source interpretation is explicit.
+	Mounts []Mount
 	// CapDrop are the Linux capabilities to drop.
 	CapDrop []string
 	// CapAdd are the Linux capabilities to add.
