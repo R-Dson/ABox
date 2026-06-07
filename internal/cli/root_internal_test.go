@@ -57,6 +57,42 @@ func TestRoot_InfoSubcommandsSkipUserConfigLoad(t *testing.T) {
 	}
 }
 
+func TestRoot_ClosesRuntimeAfterRun(t *testing.T) {
+	dir := t.TempDir()
+	closed := false
+	oldLoad := loadUserConfigFunc
+	oldDetect := detectRuntimeFunc
+	oldRun := runSessionFunc
+	loadUserConfigFunc = func() (*config.Config, error) {
+		return &config.Config{Editor: "opencode", PullPolicy: pullPolicyNever}, nil
+	}
+	detectRuntimeFunc = func(context.Context) (runtime.ContainerRuntime, error) {
+		return &runtimetest.StubRuntime{CloseFn: func() error {
+			closed = true
+			return nil
+		}}, nil
+	}
+	runSessionFunc = func(context.Context, runtime.ContainerRuntime, string, *SessionConfig) error {
+		return nil
+	}
+	defer func() {
+		loadUserConfigFunc = oldLoad
+		detectRuntimeFunc = oldDetect
+		runSessionFunc = oldRun
+	}()
+
+	root := NewRootCmd("test")
+	root.SetArgs([]string{dir})
+	root.SetOut(new(bytes.Buffer))
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("root run error = %v", err)
+	}
+	if !closed {
+		t.Fatal("runtime was not closed")
+	}
+}
+
 func TestRoot_LoadsUserConfigOnceForRun(t *testing.T) {
 	dir := t.TempDir()
 	loadCount := 0

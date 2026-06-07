@@ -51,6 +51,9 @@ type ContainerSpec struct {
 // ContainerRuntime abstracts Docker and Podman operations.
 // No subprocess exec. No shell. Everything goes through the API.
 type ContainerRuntime interface {
+	// Close releases runtime client resources.
+	Close() error
+
 	// Volumes
 	VolumeCreate(ctx context.Context, name string, labels map[string]string) error
 	VolumeRemove(ctx context.Context, name string, force bool) error

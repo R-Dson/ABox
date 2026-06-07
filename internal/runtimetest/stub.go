@@ -11,6 +11,7 @@ import (
 
 // StubRuntime satisfies runtime.ContainerRuntime with no-op defaults for tests.
 type StubRuntime struct {
+	CloseFn             func() error
 	VolumeCreateFn      func(ctx context.Context, name string, labels map[string]string) error
 	VolumeRemoveFn      func(ctx context.Context, name string, force bool) error
 	NetworkCreateFn     func(ctx context.Context, name string, internal bool) (string, error)
@@ -27,6 +28,13 @@ type StubRuntime struct {
 	CopyFromContainerFn func(ctx context.Context, id, srcPath string) (io.ReadCloser, error)
 	ImagePullFn         func(ctx context.Context, ref string, out io.Writer) error
 	ImageExistsFn       func(ctx context.Context, ref string) (bool, error)
+}
+
+func (s *StubRuntime) Close() error {
+	if s.CloseFn != nil {
+		return s.CloseFn()
+	}
+	return nil
 }
 
 func (s *StubRuntime) VolumeCreate(ctx context.Context, name string, labels map[string]string) error {

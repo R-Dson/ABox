@@ -27,6 +27,13 @@ type dockerRuntime struct {
 // Compile-time interface check.
 var _ ContainerRuntime = (*dockerRuntime)(nil)
 
+func (d *dockerRuntime) Close() error {
+	if err := d.client.Close(); err != nil {
+		return fmt.Errorf("closing Docker client: %w", err)
+	}
+	return nil
+}
+
 // NewDocker creates a Docker runtime using the Moby SDK client.
 func NewDocker(ctx context.Context) (ContainerRuntime, error) {
 	cli, err := dockerclient.NewClientWithOpts(
@@ -38,6 +45,9 @@ func NewDocker(ctx context.Context) (ContainerRuntime, error) {
 	}
 	_, err = cli.Ping(ctx)
 	if err != nil {
+		if closeErr := cli.Close(); closeErr != nil {
+			return nil, fmt.Errorf("Docker daemon unreachable: %w; closing client: %v", err, closeErr)
+		}
 		return nil, fmt.Errorf("Docker daemon unreachable: %w", err)
 	}
 	return &dockerRuntime{client: cli}, nil

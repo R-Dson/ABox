@@ -25,6 +25,9 @@ func NewPodman(ctx context.Context) (ContainerRuntime, error) {
 		return nil, fmt.Errorf("creating Podman client: %w", err)
 	}
 	if _, err := cli.Ping(ctx); err != nil {
+		if closeErr := cli.Close(); closeErr != nil {
+			return nil, fmt.Errorf("Podman daemon unreachable: %w; closing client: %v", err, closeErr)
+		}
 		return nil, fmt.Errorf("Podman daemon unreachable: %w", err)
 	}
 	return &dockerRuntime{client: cli}, nil

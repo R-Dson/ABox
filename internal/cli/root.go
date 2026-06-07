@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -99,7 +100,11 @@ func NewRootCmd(version string) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return runSessionFunc(cmd.Context(), rt, absWorkdir, cfg)
+		runErr := runSessionFunc(cmd.Context(), rt, absWorkdir, cfg)
+		if closeErr := rt.Close(); closeErr != nil {
+			return errors.Join(runErr, fmt.Errorf("closing runtime: %w", closeErr))
+		}
+		return runErr
 	}
 
 	root.AddCommand(
