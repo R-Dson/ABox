@@ -147,5 +147,5 @@ func (s *StubRuntime) ImageExists(ctx context.Context, ref string) (bool, error)
 type nopReadWriteCloser struct{}
 
 func (nopReadWriteCloser) Read(_ []byte) (int, error)  { return 0, io.EOF }
-func (nopReadWriteCloser) Write(_ []byte) (int, error) { return 0, nil }
+func (nopReadWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
 func (nopReadWriteCloser) Close() error                { return nil }
