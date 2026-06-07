@@ -164,6 +164,94 @@ func TestSyncOut_RejectsTraversalBeforeWrite(t *testing.T) {
 	}
 }
 
+func TestSyncOut_RemovesContainerDeletedTrackedFile(t *testing.T) {
+	destDir := t.TempDir()
+	oldPath := filepath.Join(destDir, "old.txt")
+	mustWriteFile(t, oldPath, []byte("old"), 0o644)
+	snapshot, err := syncpkg.SnapshotRoots(t.Context(), []syncpkg.RootSpec{{Name: "workspace", Path: destDir}})
+	if err != nil {
+		t.Fatalf("SnapshotRoots() error: %v", err)
+	}
+
+	stub := &runtimetest.StubRuntime{
+		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(emptyTar(t))), nil
+		},
+	}
+
+	if err := syncpkg.OutWithOptions(t.Context(), stub, "test-vol", "/workspace", destDir, syncpkg.Options{
+		Snapshot:      &snapshot.Roots[0],
+		DeleteMissing: true,
+	}); err != nil {
+		t.Fatalf("OutWithOptions() error: %v", err)
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Fatalf("old.txt should be removed, stat error = %v", err)
+	}
+}
+
+func TestSyncOut_DoesNotRemoveExcludedHostFileWhenMissingFromArchive(t *testing.T) {
+	destDir := t.TempDir()
+	envPath := filepath.Join(destDir, ".env")
+	mustWriteFile(t, envPath, []byte("HOST_SECRET"), 0o600)
+	matcher := exclusion.NewMatcher([]string{".env"})
+	snapshot, err := syncpkg.SnapshotRoots(t.Context(), []syncpkg.RootSpec{{Name: "workspace", Path: destDir, Matcher: matcher}})
+	if err != nil {
+		t.Fatalf("SnapshotRoots() error: %v", err)
+	}
+
+	stub := &runtimetest.StubRuntime{
+		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(emptyTar(t))), nil
+		},
+	}
+
+	if err := syncpkg.OutWithOptions(t.Context(), stub, "test-vol", "/workspace", destDir, syncpkg.Options{
+		Matcher:       matcher,
+		Snapshot:      &snapshot.Roots[0],
+		DeleteMissing: true,
+	}); err != nil {
+		t.Fatalf("OutWithOptions() error: %v", err)
+	}
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatalf("reading .env: %v", err)
+	}
+	if string(data) != "HOST_SECRET" {
+		t.Fatalf(".env = %q, want HOST_SECRET", string(data))
+	}
+}
+
+func TestSyncOut_DoesNotRemoveHostCreatedUntrackedFile(t *testing.T) {
+	destDir := t.TempDir()
+	snapshot, err := syncpkg.SnapshotRoots(t.Context(), []syncpkg.RootSpec{{Name: "workspace", Path: destDir}})
+	if err != nil {
+		t.Fatalf("SnapshotRoots() error: %v", err)
+	}
+	notesPath := filepath.Join(destDir, "notes.txt")
+	mustWriteFile(t, notesPath, []byte("host-created"), 0o644)
+
+	stub := &runtimetest.StubRuntime{
+		CopyFromContainerFn: func(_ context.Context, _, _ string) (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(emptyTar(t))), nil
+		},
+	}
+
+	if err := syncpkg.OutWithOptions(t.Context(), stub, "test-vol", "/workspace", destDir, syncpkg.Options{
+		Snapshot:      &snapshot.Roots[0],
+		DeleteMissing: true,
+	}); err != nil {
+		t.Fatalf("OutWithOptions() error: %v", err)
+	}
+	data, err := os.ReadFile(notesPath)
+	if err != nil {
+		t.Fatalf("reading host-created notes: %v", err)
+	}
+	if string(data) != "host-created" {
+		t.Fatalf("notes.txt = %q, want host-created", string(data))
+	}
+}
+
 func TestSyncOut_RecreatesSafeRelativeSymlink(t *testing.T) {
 	destDir := t.TempDir()
 
@@ -540,6 +628,16 @@ func TestSyncOut_ExtractsNestedFiles(t *testing.T) {
 	if string(mainData) != "fn m" {
 		t.Errorf("main.rs = %q, want %q", string(mainData), "fn m")
 	}
+}
+
+func emptyTar(t *testing.T) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	if err := tw.Close(); err != nil {
+		t.Fatalf("closing empty tar: %v", err)
+	}
+	return buf.Bytes()
 }
 
 func mustTarWrite(t *testing.T, tw *tar.Writer, h *tar.Header, data []byte) {

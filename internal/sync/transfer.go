@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/r-dson/abox/internal/exclusion"
@@ -394,6 +395,7 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 	}
 
 	cleanDest := filepath.Clean(dest)
+	manifest := make(map[string]struct{})
 	tr := tar.NewReader(r)
 	for {
 		header, err := tr.Next()
@@ -413,6 +415,7 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			continue
 		}
 
+		manifest[entryName] = struct{}{}
 		target := filepath.Join(dest, entryName)
 		if err := ensurePathStaysInRoot(cleanDest, target, entryName); err != nil {
 			return err
@@ -460,6 +463,43 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			if err := os.Symlink(header.Linkname, target); err != nil {
 				return fmt.Errorf("create symlink %s: %w", target, err)
 			}
+		}
+	}
+	if opts.DeleteMissing && opts.Snapshot != nil {
+		if err := reconcileMissingEntries(cleanDest, *opts.Snapshot, manifest, opts.Matcher); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func reconcileMissingEntries(root string, snapshot RootSnapshot, manifest map[string]struct{}, matcher *exclusion.Matcher) error {
+	paths := make([]string, 0, len(snapshot.Entries))
+	for rel := range snapshot.Entries {
+		if _, ok := manifest[rel]; ok {
+			continue
+		}
+		if matcher != nil && matcher.Match(rel) {
+			continue
+		}
+		paths = append(paths, rel)
+	}
+	sort.Slice(paths, func(i, j int) bool {
+		return strings.Count(paths[i], "/") > strings.Count(paths[j], "/")
+	})
+	for _, rel := range paths {
+		target := filepath.Join(root, filepath.FromSlash(rel))
+		if err := ensurePathStaysInRoot(root, target, rel); err != nil {
+			return err
+		}
+		if _, err := os.Lstat(target); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("checking missing sync path %s: %w", target, err)
+		}
+		if err := os.RemoveAll(target); err != nil {
+			return fmt.Errorf("remove missing sync path %s: %w", target, err)
 		}
 	}
 	return nil
