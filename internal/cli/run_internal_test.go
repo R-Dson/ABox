@@ -9,6 +9,42 @@ import (
 	"github.com/r-dson/abox/internal/config"
 )
 
+func TestValidateExtraEnv_RejectsReservedKeysAndDuplicates(t *testing.T) {
+	tests := []struct {
+		name    string
+		env     []string
+		wantErr string
+	}{
+		{name: "reserved host uid", env: []string{"HOST_UID=1"}, wantErr: "reserved"},
+		{name: "reserved path", env: []string{"PATH=/tmp/bin"}, wantErr: "reserved"},
+		{name: "duplicate key", env: []string{"FOO=1", "FOO=2"}, wantErr: "duplicate"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateSessionConfig(&SessionConfig{ExtraEnv: tc.env})
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("validateSessionConfig() error = %v, want containing %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestEnvFlag_KeyMirrorsHostValue(t *testing.T) {
+	t.Setenv("FOO", "host-value")
+	cfg := &SessionConfig{ExtraEnv: []string{"FOO"}}
+	if err := validateSessionConfig(cfg); err != nil {
+		t.Fatalf("validateSessionConfig() error = %v", err)
+	}
+	if len(cfg.ExtraEnv) != 1 || cfg.ExtraEnv[0] != "FOO=host-value" {
+		t.Fatalf("ExtraEnv = %v, want [FOO=host-value]", cfg.ExtraEnv)
+	}
+
+	err := validateSessionConfig(&SessionConfig{ExtraEnv: []string{"MISSING_HOST_ENV"}})
+	if err == nil || !strings.Contains(err.Error(), "host environment") {
+		t.Fatalf("missing host env error = %v, want host environment", err)
+	}
+}
+
 func TestValidateSessionConfig(t *testing.T) {
 	tests := []struct {
 		name    string

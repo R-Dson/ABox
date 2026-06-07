@@ -228,7 +228,11 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 	spec.Tty = shouldAllocateTTY(isTerminalFile(os.Stdin), cfg.Shell, cfg.ForceIT)
 
 	if len(cfg.ExtraEnv) > 0 {
-		spec.Env = append(spec.Env, cfg.ExtraEnv...)
+		mergedEnv, err := mergeEnv(spec.Env, cfg.ExtraEnv)
+		if err != nil {
+			return err
+		}
+		spec.Env = mergedEnv
 	}
 
 	if cfg.Shell {
@@ -311,6 +315,13 @@ func validateSessionConfig(cfg *SessionConfig) error {
 			return fmt.Errorf("parsing memory limit %q: %w", cfg.MemoryLimit, err)
 		}
 	}
+	if len(cfg.ExtraEnv) > 0 {
+		normalized, err := normalizeExtraEnv(cfg.ExtraEnv)
+		if err != nil {
+			return err
+		}
+		cfg.ExtraEnv = normalized
+	}
 	pullPolicy := cfg.PullPolicy
 	if pullPolicy == "" {
 		pullPolicy = pullPolicyNever
@@ -319,6 +330,53 @@ func validateSessionConfig(cfg *SessionConfig) error {
 		return fmt.Errorf("unsupported pull policy %q: use always, missing, or never", pullPolicy)
 	}
 	return nil
+}
+
+func normalizeExtraEnv(values []string) ([]string, error) {
+	seen := make(map[string]bool, len(values))
+	normalized := make([]string, 0, len(values))
+	for _, raw := range values {
+		key, value, hasValue := strings.Cut(raw, "=")
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return nil, fmt.Errorf("environment key cannot be empty")
+		}
+		if blockedEnvKeys[key] {
+			return nil, fmt.Errorf("environment key %q is reserved", key)
+		}
+		if seen[key] {
+			return nil, fmt.Errorf("duplicate environment key %q", key)
+		}
+		seen[key] = true
+		if !hasValue {
+			var ok bool
+			value, ok = os.LookupEnv(key)
+			if !ok {
+				return nil, fmt.Errorf("environment key %q is not present in host environment", key)
+			}
+		}
+		normalized = append(normalized, key+"="+value)
+	}
+	return normalized, nil
+}
+
+func mergeEnv(base, extra []string) ([]string, error) {
+	seen := make(map[string]bool, len(base)+len(extra))
+	merged := make([]string, 0, len(base)+len(extra))
+	for _, entry := range base {
+		key, _, _ := strings.Cut(entry, "=")
+		seen[key] = true
+		merged = append(merged, entry)
+	}
+	for _, entry := range extra {
+		key, _, _ := strings.Cut(entry, "=")
+		if seen[key] {
+			return nil, fmt.Errorf("duplicate environment key %q", key)
+		}
+		seen[key] = true
+		merged = append(merged, entry)
+	}
+	return merged, nil
 }
 
 func ensureRequiredImages(ctx context.Context, rt runtime.ContainerRuntime, editorImage string, cfg *SessionConfig) error {
