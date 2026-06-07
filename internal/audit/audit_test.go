@@ -67,6 +67,42 @@ func TestCheckWorkdirSafety(t *testing.T) {
 	}
 }
 
+func TestAuditSensitiveFilesUsesHardcodedMatcher(t *testing.T) {
+	cases := []string{
+		filepath.Join(".aws", "credentials"),
+		".npmrc",
+		".pypirc",
+		filepath.Join("nested", ".env.production"),
+		"id_ed25519",
+		"tls.pem",
+	}
+
+	for _, rel := range cases {
+		t.Run(rel, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, rel)
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte("secret"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			result, err := audit.Run(t.Context(), dir)
+			if err != nil {
+				t.Fatalf("Run() error: %v", err)
+			}
+			check := findAuditCheck(t, result, "sensitive_files")
+			if check.Status != audit.Warn {
+				t.Fatalf("sensitive status = %v, want Warn", check.Status)
+			}
+			if check.Detail != path {
+				t.Fatalf("sensitive detail = %q, want %q", check.Detail, path)
+			}
+		})
+	}
+}
+
 func TestAuditDetailsIncludePath(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".env")
@@ -87,6 +123,17 @@ func TestAuditDetailsIncludePath(t *testing.T) {
 		}
 	}
 	t.Fatal("missing sensitive_files check")
+}
+
+func findAuditCheck(t *testing.T, result *audit.Result, name string) audit.Check {
+	t.Helper()
+	for _, check := range result.Checks {
+		if check.Name == name {
+			return check
+		}
+	}
+	t.Fatalf("missing audit check %q", name)
+	return audit.Check{}
 }
 
 func TestCheckSensitiveFiles(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/r-dson/abox/internal/exclusion"
 	"github.com/r-dson/abox/internal/osutil"
 )
 
@@ -18,10 +19,7 @@ const (
 	Warn Status = "warn"
 )
 
-var (
-	sensitiveWorkspacePaths = []string{".env", ".ssh/id_rsa"}
-	secureHomeDirFunc       = osutil.SystemHomeDir
-)
+var secureHomeDirFunc = osutil.SystemHomeDir
 
 // Check represents a single audit finding.
 type Check struct {
@@ -91,11 +89,23 @@ func CheckSensitiveFiles(workdir string) Status {
 }
 
 func checkSensitiveFiles(workdir string) (Status, string) {
-	for _, name := range sensitiveWorkspacePaths {
-		path := filepath.Join(workdir, name)
-		if _, err := os.Stat(path); err == nil {
-			return Warn, path
+	matcher := exclusion.NewMatcher(exclusion.HardcodedPatterns())
+	var found string
+	_ = filepath.WalkDir(workdir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || found != "" || entry.IsDir() {
+			return nil
 		}
+		rel, err := filepath.Rel(workdir, path)
+		if err != nil {
+			return nil
+		}
+		if matcher.Match(filepath.ToSlash(rel)) {
+			found = path
+		}
+		return nil
+	})
+	if found != "" {
+		return Warn, found
 	}
 	return Pass, ""
 }
