@@ -167,7 +167,11 @@ func sshAgentSocket() string {
 	if sock == "" {
 		return ""
 	}
-	if _, err := os.Stat(sock); err != nil {
+	info, err := os.Stat(sock)
+	if err != nil {
+		return ""
+	}
+	if info.Mode()&os.ModeSocket == 0 {
 		return ""
 	}
 	return sock

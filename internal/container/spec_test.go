@@ -1,6 +1,7 @@
 package container_test
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -175,14 +176,43 @@ func TestBuildSpec_DoesNotMountSSHAgentSocketByDefault(t *testing.T) {
 	}
 }
 
-func TestBuildSpec_MountsSSHAgentSocketWhenEnabled(t *testing.T) {
+func TestSSHAgentSocketRequiresUnixSocket(t *testing.T) {
 	home := t.TempDir()
 	socketPath := filepath.Join(home, "ssh-agent.sock")
 	t.Setenv("HOME", home)
 	t.Setenv("SSH_AUTH_SOCK", socketPath)
 	if err := os.WriteFile(socketPath, nil, 0o600); err != nil {
-		t.Fatalf("creating ssh agent socket fixture: %v", err)
+		t.Fatalf("creating regular SSH_AUTH_SOCK fixture: %v", err)
 	}
+
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{ForwardSSHAgent: true})
+
+	for _, bind := range spec.Binds {
+		if strings.Contains(bind, "ssh-agent.sock") {
+			t.Fatalf("regular SSH_AUTH_SOCK file must not be mounted: %q", bind)
+		}
+	}
+	for _, env := range spec.Env {
+		if strings.HasPrefix(env, "SSH_AUTH_SOCK=") {
+			t.Fatalf("regular SSH_AUTH_SOCK file must not set env: %q", env)
+		}
+	}
+}
+
+func TestBuildSpec_MountsSSHAgentSocketWhenEnabled(t *testing.T) {
+	home := t.TempDir()
+	socketPath := filepath.Join(home, "ssh-agent.sock")
+	t.Setenv("HOME", home)
+	t.Setenv("SSH_AUTH_SOCK", socketPath)
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("creating unix socket fixture: %v", err)
+	}
+	defer listener.Close()
 
 	registry, _ := config.LoadEditorRegistry()
 	profile, _ := registry.Get("claude")
