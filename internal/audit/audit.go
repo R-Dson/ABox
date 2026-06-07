@@ -2,8 +2,11 @@ package audit
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/r-dson/abox/internal/osutil"
 )
 
 // Status represents the outcome of a single audit check.
@@ -15,7 +18,10 @@ const (
 	Warn Status = "warn"
 )
 
-var sensitiveWorkspacePaths = []string{".env", ".ssh/id_rsa"}
+var (
+	sensitiveWorkspacePaths = []string{".env", ".ssh/id_rsa"}
+	secureHomeDirFunc       = osutil.SystemHomeDir
+)
 
 // Check represents a single audit finding.
 type Check struct {
@@ -33,10 +39,7 @@ type Result struct {
 func Run(_ context.Context, workdir string) (*Result, error) {
 	result := &Result{}
 
-	result.Checks = append(result.Checks, Check{
-		Name:   "workdir_safety",
-		Status: CheckWorkdirSafety(workdir),
-	})
+	result.Checks = append(result.Checks, checkWorkdirSafety(workdir))
 
 	sensitiveStatus, sensitivePath := checkSensitiveFiles(workdir)
 	result.Checks = append(result.Checks, Check{
@@ -50,19 +53,35 @@ func Run(_ context.Context, workdir string) (*Result, error) {
 
 // CheckWorkdirSafety returns Fail if the workdir resolves to $HOME or /.
 func CheckWorkdirSafety(workdir string) Status {
+	return checkWorkdirSafety(workdir).Status
+}
+
+func checkWorkdirSafety(workdir string) Check {
+	check := Check{Name: "workdir_safety", Status: Pass}
 	abs, err := filepath.EvalSymlinks(workdir)
 	if err != nil {
-		return Fail
+		check.Status = Fail
+		check.Detail = fmt.Sprintf("resolving workspace: %v", err)
+		return check
 	}
 
-	home, _ := os.UserHomeDir()
-	if home != "" && abs == home {
-		return Fail
+	home, err := secureHomeDirFunc()
+	if err != nil {
+		check.Status = Fail
+		check.Detail = fmt.Sprintf("resolving user home: %v", err)
+		return check
+	}
+	if abs == home {
+		check.Status = Fail
+		check.Detail = abs
+		return check
 	}
 	if abs == "/" {
-		return Fail
+		check.Status = Fail
+		check.Detail = abs
+		return check
 	}
-	return Pass
+	return check
 }
 
 // CheckSensitiveFiles returns Warn if known sensitive files exist in workdir.

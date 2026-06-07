@@ -36,11 +36,9 @@ func TestRootCmd_HasRunFlags(t *testing.T) {
 }
 
 func TestAuditReturnsNonZeroOnFail(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
 	buf := new(bytes.Buffer)
 	root := cli.NewRootCmd("test")
-	root.SetArgs([]string{"audit", home})
+	root.SetArgs([]string{"audit", "/"})
 	root.SetOut(buf)
 	root.SetErr(buf)
 
