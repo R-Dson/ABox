@@ -79,6 +79,18 @@ func TestBuildMatcher_LoadsLocalIgnore(t *testing.T) {
 	}
 }
 
+func TestBuildMatcher_InvalidPatternFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".abxignore"), []byte("[bad\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := exclusion.BuildMatcher(t.Context(), dir)
+	if err == nil || !strings.Contains(err.Error(), "invalid exclusion pattern") {
+		t.Fatalf("BuildMatcher() error = %v, want invalid exclusion pattern", err)
+	}
+}
+
 func TestBuildMatcher_ReturnsLocalIgnoreReadError(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, ".abxignore"), 0o755); err != nil {

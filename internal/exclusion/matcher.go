@@ -74,7 +74,19 @@ func BuildMatcherWithRemote(ctx context.Context, workdir, excludeURL string) (*M
 		patterns = mergePatterns(patterns, normalizePatterns(remote))
 	}
 
+	if err := validatePatterns(patterns); err != nil {
+		return nil, err
+	}
 	return &Matcher{patterns: patterns}, nil
+}
+
+func validatePatterns(patterns []string) error {
+	for _, pattern := range patterns {
+		if !doublestar.ValidatePattern(pattern) {
+			return fmt.Errorf("invalid exclusion pattern %q", pattern)
+		}
+	}
+	return nil
 }
 
 func loadRemoteIgnore(ctx context.Context, excludeURL string) ([]string, error) {
