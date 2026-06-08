@@ -32,7 +32,14 @@ ABox requires:
 - Docker or Podman installed and running.
 - Go 1.26 or newer for local development and validation.
 
+| Platform | Architecture | Runtime | Rootless | Notes |
+|----------|-------------|---------|----------|-------|
+| Linux | amd64, arm64 | Docker, Podman | Yes | Primary target. Podman rootless is supported. |
+| macOS | amd64 (Intel), arm64 (Apple Silicon) | Docker Desktop | N/A | UID/GID collisions with macOS `staff` group (GID 20) are handled gracefully. |
+
 By default, ABox does **not** pull container images automatically. Pull/build the required images ahead of time, or set `pull_policy` to `missing` or `always` when you want ABox to pull images.
+
+Container images are published to `ghcr.io/r-dson/abox` with signed SBOMs. Pin to versioned tags (`<editor>-<version>`) for reproducible builds; unversioned tags (`<editor>`) follow the latest release.
 
 ## Installation
 
