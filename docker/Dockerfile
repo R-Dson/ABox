@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim
+FROM debian@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG INSTALL_CMD=""
@@ -56,8 +56,10 @@ ENV PATH="${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:${PATH}"
 # Add local bin to PATH for installers
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Run editor-specific installation logic
-RUN VERSION="$VERSION" eval "$INSTALL_CMD" && \
+# Install editor — passed as explicit build arg, not eval'd.
+# The install command is populated from config/editors.json at build time.
+# SECURITY: Do not change to eval — INSTALL_CMD comes from trusted registry config only.
+RUN VERSION="$VERSION" bash -c "$INSTALL_CMD" && \
     if [ -d /root/.local/bin ]; then cp -rn /root/.local/bin/* /usr/local/bin/ || true; fi
 
 
