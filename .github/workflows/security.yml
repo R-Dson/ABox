@@ -1,0 +1,85 @@
+name: Security
+
+on:
+  push:
+    branches: [main, dev, go-rewrite]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run govulncheck
+        run: |
+          set +e
+          go tool govulncheck ./... 2>&1 | tee govulncheck.out
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          findings=$(grep -Eo 'GO-[0-9]{4}-[0-9]+' govulncheck.out | sort -u | tr '\n' ' ')
+          if [ "$findings" = "GO-2026-4883 GO-2026-4887 " ]; then
+            echo "Only accepted Docker SDK findings present: $findings"
+            exit 0
+          fi
+          echo "Unexpected govulncheck findings: $findings"
+          exit "$status"
+
+  workflow-lint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run actionlint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@latest .github/workflows/*.yml
+
+  secrets:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker-lint:
+    name: hadolint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/Dockerfile
+      - name: Run Hadolint for sync image
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/Dockerfile.sync
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: go
+      - uses: github/codeql-action/analyze@v4
