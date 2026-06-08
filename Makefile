@@ -2,10 +2,10 @@ CONTAINER_RUNTIME ?= docker
 IMAGE_NAME ?= ghcr.io/r-dson/abox
 ABX_EDITOR ?= opencode
 
-# Extract build metadata from config/editors.json
-VERSION = $(shell jq -r '.editors["$(ABX_EDITOR)"].version' config/editors.json)
+# Extract editor image metadata from config/editors.json
+EDITOR_VERSION ?= $(shell jq -r '.editors["$(ABX_EDITOR)"].version' config/editors.json)
 INSTALL_CMD_RAW = $(shell jq -r '.editors["$(ABX_EDITOR)"].install_cmd' config/editors.json)
-INSTALL_CMD = $(subst {version},$(VERSION),$(INSTALL_CMD_RAW))
+INSTALL_CMD = $(subst {version},$(EDITOR_VERSION),$(INSTALL_CMD_RAW))
 COMMAND_NAME = $(shell jq -r '.editors["$(ABX_EDITOR)"].cmd_name' config/editors.json)
 
 IMAGE_TAG = $(IMAGE_NAME):$(ABX_EDITOR)
@@ -14,10 +14,10 @@ IMAGE_TAG = $(IMAGE_NAME):$(ABX_EDITOR)
 
 # Default target - build Docker image
 build:
-	@echo "Building image for $(ABX_EDITOR) (version: $(VERSION))..."
+	@echo "Building image for $(ABX_EDITOR) (version: $(EDITOR_VERSION))..."
 	$(CONTAINER_RUNTIME) build -t $(IMAGE_TAG) \
 		--build-arg INSTALL_CMD='$(INSTALL_CMD)' \
-		--build-arg VERSION="$(VERSION)" \
+		--build-arg VERSION="$(EDITOR_VERSION)" \
 		--build-arg COMMAND_NAME="$(COMMAND_NAME)" \
 		-f docker/Dockerfile \
 		.
@@ -83,10 +83,10 @@ test: build
 
 .PHONY: go-build go-test go-lint go-install go-cover
 
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+CLI_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
-LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
+LDFLAGS := -s -w -X main.version=$(CLI_VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
 go-build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o abx ./cmd/abx
