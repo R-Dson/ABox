@@ -24,6 +24,11 @@ var (
 // The root command IS the run command — `abx [flags] [dir]` runs an editor.
 // Subcommands (audit, config, version, completion) are registered separately.
 func NewRootCmd(version string) *cobra.Command {
+	return NewRootCmdWithVersion(VersionInfo{Version: version, Commit: "unknown", Date: "unknown"})
+}
+
+// NewRootCmdWithVersion creates the root command with full build metadata.
+func NewRootCmdWithVersion(versionInfo VersionInfo) *cobra.Command {
 	var loadedConfig *config.Config
 	root := &cobra.Command{
 		Use:           "abx [flags] [directory] [editor args...]",
@@ -110,7 +115,7 @@ func NewRootCmd(version string) *cobra.Command {
 	root.AddCommand(
 		newAuditCmd(),
 		newConfigCmd(),
-		newVersionCmd(version),
+		newVersionCmd(versionInfo),
 		newCompletionCmd(root),
 	)
 

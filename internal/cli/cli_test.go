@@ -95,7 +95,7 @@ func TestRootCmd_RunE(t *testing.T) {
 
 func TestVersionCmd(t *testing.T) {
 	buf := new(bytes.Buffer)
-	root := cli.NewRootCmd("1.0.0-test")
+	root := cli.NewRootCmdWithVersion(cli.VersionInfo{Version: "1.0.0-test", Commit: "abc123", Date: "2026-06-08T00:00:00Z"})
 	root.SetArgs([]string{"version"})
 	root.SetOut(buf)
 	root.SetErr(buf)
@@ -108,8 +108,10 @@ func TestVersionCmd(t *testing.T) {
 	if output == "" {
 		return
 	}
-	if !bytes.Contains([]byte(output), []byte("1.0.0-test")) {
-		t.Errorf("version output doesn't contain version: %q", output)
+	for _, want := range []string{"1.0.0-test", "abc123", "2026-06-08T00:00:00Z"} {
+		if !bytes.Contains([]byte(output), []byte(want)) {
+			t.Errorf("version output doesn't contain %q: %q", want, output)
+		}
 	}
 }
 
