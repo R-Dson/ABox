@@ -2,6 +2,7 @@ package container
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -194,7 +195,7 @@ func sanitizedGitConfig() (string, error) {
 
 func sanitizeGitConfig(data []byte) string {
 	var b strings.Builder
-	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	scanner := bufio.NewScanner(bytes.NewReader(data))
 	inUserSection := false
 	for scanner.Scan() {
 		line := scanner.Text()

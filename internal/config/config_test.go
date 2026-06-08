@@ -204,10 +204,7 @@ func TestEditorProfile_ConfigFullPath(t *testing.T) {
 }
 
 func TestHomeDir(t *testing.T) {
-	orig := os.Getenv("HOME")
-	defer os.Setenv("HOME", orig)
-
-	os.Setenv("HOME", "/test/home")
+	t.Setenv("HOME", "/test/home")
 	if got := config.HomeDir(); got != "/test/home" {
 		t.Errorf("HomeDir() = %q, want /test/home", got)
 	}
@@ -379,8 +376,7 @@ func TestLoad_ReadsJSONConfig(t *testing.T) {
 }
 
 func TestLoad_EnvOverride(t *testing.T) {
-	os.Setenv("ABX_EDITOR", "gemini")
-	defer os.Unsetenv("ABX_EDITOR")
+	t.Setenv("ABX_EDITOR", "gemini")
 
 	v := viper.New()
 	v.SetEnvPrefix("ABX")

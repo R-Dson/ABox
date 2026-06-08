@@ -11,16 +11,14 @@ import (
 )
 
 func TestSetup_VerboseCreatesLogFile(t *testing.T) {
-	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 
 	if err := logging.Setup(true, false); err != nil {
 		t.Fatalf("Setup() error: %v", err)
 	}
 
-	logFile := filepath.Join(tmpHome, ".local", "state", "abx", "abx.log")
+	logFile := filepath.Join(home, ".local", "state", "abx", "abx.log")
 	info, err := os.Stat(logFile)
 	if err != nil {
 		t.Fatalf("verbose log file not created at %s: %v", logFile, err)
@@ -31,16 +29,14 @@ func TestSetup_VerboseCreatesLogFile(t *testing.T) {
 }
 
 func TestSetup_NonVerboseNoFile(t *testing.T) {
-	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 
 	if err := logging.Setup(false, false); err != nil {
 		t.Fatalf("Setup() error: %v", err)
 	}
 
-	logFile := filepath.Join(tmpHome, ".local", "state", "abx", "abx.log")
+	logFile := filepath.Join(home, ".local", "state", "abx", "abx.log")
 	if _, err := os.Stat(logFile); err == nil {
 		t.Error("log file should not be created when verbose=false")
 	}
@@ -74,10 +70,7 @@ func TestLogging_JSONOnlyWhenFlagTrue(t *testing.T) {
 }
 
 func TestSetup_JSONOutput(t *testing.T) {
-	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("HOME", t.TempDir())
 
 	if err := logging.Setup(false, true); err != nil {
 		t.Fatalf("Setup() error: %v", err)
@@ -85,16 +78,14 @@ func TestSetup_JSONOutput(t *testing.T) {
 }
 
 func TestSetup_VerboseAndJSON(t *testing.T) {
-	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 
 	if err := logging.Setup(true, true); err != nil {
 		t.Fatalf("Setup() error: %v", err)
 	}
 
-	logFile := filepath.Join(tmpHome, ".local", "state", "abx", "abx.log")
+	logFile := filepath.Join(home, ".local", "state", "abx", "abx.log")
 	if _, err := os.Stat(logFile); err != nil {
 		t.Error("log file should exist when verbose=true even with json=true")
 	}

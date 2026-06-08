@@ -32,7 +32,7 @@ func TestMultiHandlerAttemptsAllAndJoinsErrors(t *testing.T) {
 	second := &recordingHandler{err: errTwo}
 	h := &multiHandler{handlers: []slog.Handler{first, second}}
 
-	err := h.Handle(context.Background(), slog.NewRecord(time.Now(), slog.LevelInfo, "msg", 0))
+	err := h.Handle(t.Context(), slog.NewRecord(time.Now(), slog.LevelInfo, "msg", 0))
 	if !first.called || !second.called {
 		t.Fatalf("called first=%v second=%v, want both", first.called, second.called)
 	}
