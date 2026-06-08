@@ -28,6 +28,7 @@ type Mount struct {
 }
 
 // ContainerSpec holds the typed specification for creating a container.
+// Values are consumed once during container creation and must not be mutated afterwards.
 type ContainerSpec struct {
 	// Name is the container name.
 	Name string

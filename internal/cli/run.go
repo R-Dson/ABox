@@ -295,8 +295,7 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 	return nil
 }
 
-// ValidateWorkdir rejects unsafe workspace paths.
-// Expects an absolute path.
+// shouldAllocateTTY determines whether the container should allocate a pseudo-TTY.
 func shouldAllocateTTY(hasTerminalInput, shell, forceInteractive bool) bool {
 	return hasTerminalInput || shell || forceInteractive
 }
@@ -446,6 +445,8 @@ func ensureImage(ctx context.Context, rt runtime.ContainerRuntime, image, pullPo
 	}
 }
 
+// ValidateWorkdir rejects unsafe workspace paths.
+// Expects an absolute path.
 func ValidateWorkdir(abs string) error {
 	resolved, err := filepath.EvalSymlinks(abs)
 	if err != nil {

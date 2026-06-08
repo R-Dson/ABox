@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	containerHomeDir     = "/home/agent"
-	containerWorkDir     = "/workspace"
-	fileConfigVolumePath = "/vol/config"
-	readOnlyBindFlags    = "ro,z"
-	defaultPidsLimit     = int64(512)
+	containerHomeDir     = "/home/agent" // Matches the home directory created in Dockerfile
+	containerWorkDir     = "/workspace"  // Matches WORKDIR in Dockerfile
+	fileConfigVolumePath = "/vol/config" // Mount point for single-file config volumes
+	readOnlyBindFlags    = "ro,z"        // Read-only bind with relabeling for SELinux
+	defaultPidsLimit     = int64(512)    // Prevent fork bombs
 )
 
 // seccompPath materializes the embedded seccomp profile to a temp file.

@@ -56,6 +56,8 @@ func BuildMatcher(ctx context.Context, workdir string) (*Matcher, error) {
 	return BuildMatcherWithRemote(ctx, workdir, "")
 }
 
+// BuildMatcherWithRemote constructs a Matcher from hardcoded patterns, local .abxignore, and an optional remote exclusion URL.
+// The excludeURL must use HTTPS. Invalid patterns cause a fail-closed error.
 func BuildMatcherWithRemote(ctx context.Context, workdir, excludeURL string) (*Matcher, error) {
 	patterns := HardcodedPatterns()
 
