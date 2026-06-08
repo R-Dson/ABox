@@ -15,11 +15,7 @@ builds:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
 archives:
-  - name_template: >-
-      {{ .ProjectName }}_
-      {{- .Version }}_
-      {{- .Os }}_
-      {{- .Arch }}
+  - name_template: "abx_{{ .Os }}_{{ .Arch }}"
     format: tar.gz
 
 checksum:
@@ -37,5 +33,5 @@ release:
   github:
     owner: R-Dson
     name: ABox
-  replace_existing_artifacts: true
+  replace_existing_artifacts: false
   prerelease: auto

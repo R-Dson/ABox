@@ -58,6 +58,23 @@ case $choice in
         ;;
 esac
 
+sha256_file() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | cut -d' ' -f1
+        return
+    fi
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | cut -d' ' -f1
+        return
+    fi
+    if command -v openssl >/dev/null 2>&1; then
+        openssl dgst -sha256 "$1" | awk '{print $NF}'
+        return
+    fi
+    echo "Error: no SHA-256 tool found (need sha256sum, shasum, or openssl)." >&2
+    return 1
+}
+
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -71,19 +88,23 @@ fi
 
 # Verify SHA-256 checksum
 echo "Verifying integrity..."
-if curl -fsSL "$CHECKSUM_URL" -o "$TMPDIR/checksums.txt" 2>/dev/null; then
-    EXPECTED="$(grep "$ARTIFACT" "$TMPDIR/checksums.txt" | cut -d' ' -f1)"
-    ACTUAL="$(sha256sum "$TMPDIR/$ARTIFACT" | cut -d' ' -f1)"
-    if [ "$EXPECTED" != "$ACTUAL" ]; then
-        echo "Error: SHA-256 verification failed."
-        echo "Expected: $EXPECTED"
-        echo "Actual:   $ACTUAL"
-        exit 1
-    fi
-    echo "Integrity verified."
-else
-    echo "Warning: Checksum not available. Skipping integrity verification."
+if ! curl -fsSL "$CHECKSUM_URL" -o "$TMPDIR/checksums.txt" 2>/dev/null; then
+    echo "Error: checksum file not available at $CHECKSUM_URL"
+    exit 1
 fi
+EXPECTED="$(grep "  $ARTIFACT$" "$TMPDIR/checksums.txt" | awk '{print $1}')"
+if [ -z "$EXPECTED" ]; then
+    echo "Error: checksum entry for $ARTIFACT not found."
+    exit 1
+fi
+ACTUAL="$(sha256_file "$TMPDIR/$ARTIFACT")"
+if [ "$EXPECTED" != "$ACTUAL" ]; then
+    echo "Error: SHA-256 verification failed."
+    echo "Expected: $EXPECTED"
+    echo "Actual:   $ACTUAL"
+    exit 1
+fi
+echo "Integrity verified."
 
 # Extract and install
 tar -xzf "$TMPDIR/$ARTIFACT" -C "$TMPDIR" "$BINARY_NAME"

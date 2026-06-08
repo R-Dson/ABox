@@ -81,12 +81,13 @@ test: build
 
 # ── Go targets ──────────────────────────────────────────────────────────
 
-.PHONY: go-build go-test go-lint go-install go-cover
+.PHONY: go-build go-test go-lint go-install go-cover go-race-cover
 
 CLI_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 LDFLAGS := -s -w -X main.version=$(CLI_VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
+GO_COVER_PACKAGES := $(shell go list ./... | grep -v -E '(cmd/abx$$|internal/runtime$$)')
 
 go-build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o abx ./cmd/abx
@@ -102,6 +103,11 @@ go-install: go-build
 	install -m 755 abx $(DESTDIR)/usr/local/bin/abx
 
 go-cover:
-	go test -coverprofile=coverage.out ./...
+	go test -coverprofile=coverage.out $(GO_COVER_PACKAGES)
+	go tool cover -func=coverage.out | tail -1
+	rm -f coverage.out
+
+go-race-cover:
+	go test -race -coverprofile=coverage.out $(GO_COVER_PACKAGES)
 	go tool cover -func=coverage.out | tail -1
 	rm -f coverage.out
