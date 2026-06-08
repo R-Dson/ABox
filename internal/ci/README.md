@@ -13,14 +13,15 @@ go tool golangci-lint run ./...
 For CI-equivalent race/coverage and build checks:
 
 ```bash
-go test -race -coverprofile=coverage.out $(go list ./... | grep -v -E '(cmd/abx$|internal/runtime$)')
+go test -race -coverprofile=coverage.out $(go list ./... | grep -v -E 'cmd/abx$')
 go build -trimpath -ldflags="-s -w" ./cmd/abx
 ./abx version
+go run github.com/rhysd/actionlint/cmd/actionlint@latest .github/workflows/*.yml
 ```
 
 ## govulncheck triage
 
-`govulncheck` is tracked as a Go tool so dependency vulnerability checks are reproducible:
+`govulncheck` is tracked as a Go tool so dependency vulnerability checks are reproducible. CI fails on new findings, while the currently accepted Docker SDK findings listed below are allowed until upstream publishes a fixed version:
 
 ```bash
 go tool govulncheck ./...

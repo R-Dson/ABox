@@ -22,6 +22,24 @@ jobs:
         run: go mod verify
       - name: Run linter
         run: go tool golangci-lint run ./...
+      - name: Run govulncheck
+        run: |
+          set +e
+          go tool govulncheck ./... 2>&1 | tee govulncheck.out
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          findings=$(grep -Eo 'GO-[0-9]{4}-[0-9]+' govulncheck.out | sort -u | tr '\n' ' ')
+          if [ "$findings" = "GO-2026-4883 GO-2026-4887 " ]; then
+            echo "Only accepted Docker SDK findings present: $findings"
+            exit 0
+          fi
+          echo "Unexpected govulncheck findings: $findings"
+          exit "$status"
+      - name: Run actionlint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@latest .github/workflows/*.yml
 
   test:
     name: Test
@@ -33,19 +51,34 @@ jobs:
           go-version-file: go.mod
       - name: Run tests
         run: |
-          # Exclude packages that require live Docker daemon or are trivially small
+          # cmd/abx is main-only; runtime has pure unit tests and is included.
           go test -race -coverprofile=coverage.out \
-            $(go list ./... | grep -v -E '(cmd/abx$|internal/runtime$)')
+            $(go list ./... | grep -v -E 'cmd/abx$')
       - name: Check coverage
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
           echo "Total coverage: ${COVERAGE}%"
-          # cmd/abx (main only) and runtime (Docker SDK calls) excluded —
-          # they require a live container daemon and cannot be unit-tested.
-          if (( $(echo "$COVERAGE < 70" | bc -l) )); then
-            echo "Coverage ${COVERAGE}% is below 70% threshold"
-            exit 1
-          fi
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+
+          coverage = None
+          for line in Path('coverage.out').read_text().splitlines():
+              pass
+          # Parse the already computed total for readability and avoid bc.
+          import subprocess
+          output = subprocess.check_output(['go', 'tool', 'cover', '-func=coverage.out'], text=True)
+          for line in output.splitlines():
+              if line.startswith('total:'):
+                  coverage = float(line.split()[-1].rstrip('%'))
+                  break
+          if coverage is None:
+              print('could not determine coverage', file=sys.stderr)
+              sys.exit(1)
+          if coverage < 70:
+              print(f'Coverage {coverage}% is below 70% threshold', file=sys.stderr)
+              sys.exit(1)
+          PY
 
   build:
     name: Build
