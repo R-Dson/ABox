@@ -14,7 +14,7 @@ func TestDockerMapping_ExplicitMountType(t *testing.T) {
 			{Type: MountTypeVolume, Source: "/path-shaped-volume", Target: "/data", NoCopy: true},
 			{Type: MountTypeBind, Source: "relative-bind-name", Target: "/bind", ReadOnly: true},
 		},
-	}, true)
+	}, true, true)
 	if err != nil {
 		t.Fatalf("dockerCreateConfigs() error = %v", err)
 	}
@@ -52,7 +52,7 @@ func TestDockerMapping_PropagatesNetworkEnvResourcesSecurity(t *testing.T) {
 		PidsLimit:   128,
 		Memory:      256,
 		NanoCPUs:    500,
-	}, true)
+	}, true, true)
 	if err != nil {
 		t.Fatalf("dockerCreateConfigs() error = %v", err)
 	}

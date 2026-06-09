@@ -251,7 +251,18 @@ jobs:
       max-parallel: 1
       matrix:
         editor:
-          [opencode, claude, aider, copilot, vibe, goose, codex, gemini, pi, cursor]
+          [
+            opencode,
+            claude,
+            aider,
+            copilot,
+            vibe,
+            goose,
+            codex,
+            gemini,
+            pi,
+            cursor,
+          ]
     steps:
       - name: Clean up old ${{ matrix.editor }} images
         uses: dataaxiom/ghcr-cleanup-action@v1.4.0

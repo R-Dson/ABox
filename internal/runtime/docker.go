@@ -21,6 +21,7 @@ import (
 type dockerRuntime struct {
 	client        *dockerclient.Client
 	inlineSeccomp bool // Docker accepts inline JSON; Podman requires file paths
+	supportsInit  bool // Docker supports --init; Podman's catatonit fails under seccomp
 	stdinMu       sync.Mutex
 	openStdinBy   map[string]bool
 }
@@ -51,7 +52,7 @@ func NewDocker(ctx context.Context) (ContainerRuntime, error) {
 		}
 		return nil, fmt.Errorf("Docker daemon unreachable: %w", err)
 	}
-	return &dockerRuntime{client: cli, inlineSeccomp: true, openStdinBy: make(map[string]bool)}, nil
+	return &dockerRuntime{client: cli, inlineSeccomp: true, supportsInit: true, openStdinBy: make(map[string]bool)}, nil
 }
 
 func (d *dockerRuntime) VolumeCreate(ctx context.Context, name string, labels map[string]string) error {
@@ -91,7 +92,7 @@ func (d *dockerRuntime) NetworkRemove(ctx context.Context, id string) error {
 }
 
 func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec) (string, error) {
-	containerConfig, hostConfig, err := dockerCreateConfigs(spec, d.inlineSeccomp)
+	containerConfig, hostConfig, err := dockerCreateConfigs(spec, d.inlineSeccomp, d.supportsInit)
 	if err != nil {
 		return "", err
 	}
@@ -104,7 +105,7 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec)
 	return resp.ID, nil
 }
 
-func dockerCreateConfigs(spec ContainerSpec, inlineSeccomp bool) (*dockercontainer.Config, *dockercontainer.HostConfig, error) {
+func dockerCreateConfigs(spec ContainerSpec, inlineSeccomp, supportsInit bool) (*dockercontainer.Config, *dockercontainer.HostConfig, error) {
 	containerConfig := &dockercontainer.Config{
 		Image:        spec.Image,
 		Cmd:          spec.Cmd,
@@ -178,7 +179,7 @@ func dockerCreateConfigs(spec ContainerSpec, inlineSeccomp bool) (*dockercontain
 	} else {
 		hostConfig.Mounts = mounts
 	}
-	if spec.Init {
+	if spec.Init && supportsInit {
 		hostConfig.Init = new(true)
 	}
 	if spec.PidsLimit > 0 {
