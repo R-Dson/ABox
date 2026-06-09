@@ -90,7 +90,7 @@ LDFLAGS := -s -w -X main.version=$(CLI_VERSION) -X main.commit=$(COMMIT) -X main
 GO_COVER_PACKAGES := $(shell go list ./... | grep -v -E '(cmd/abx$$|internal/runtime$$)')
 
 go-build:
-	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o abx ./cmd/abx
+	CGO_ENABLED=0 go build -trimpath -ldflags="$(LDFLAGS)" -o abx ./cmd/abx
 
 go-test:
 	go test -count=1 ./...
@@ -113,23 +113,13 @@ go-race-cover:
 	rm -f coverage.out
 
 # ── Dev image ──────────────────────────────────────────────────────────
+# Builds per-editor images for the dev branch (all editors, Go-based).
+# Uses the same Dockerfile and build args as `make build ABX_EDITOR=<name>`.
 
 .PHONY: build-dev
 build-dev:
-	@echo "Generating editor install script..."
-	@jq -r '[.editors | to_entries[] | "# " + .key + "\n" + .value.install_cmd] | join("\n")' config/editors.json > docker/install-editors.sh.tmp
-	@# Substitute {version} placeholders with actual versions from the registry.
-	@jq -r '.editors | to_entries[] | "\(.key)=\(.value.version)"' config/editors.json | while IFS='=' read -r key ver; do \
-	    sed -i "s/{version}/$$ver/g" docker/install-editors.sh.tmp ; \
+	@for editor in $$(jq -r '.editors | keys[]' config/editors.json); do \
+	    echo "=== Building dev image for $$editor ===" ; \
+	    $(MAKE) build ABX_EDITOR=$$editor ; \
 	done
-	@mv docker/install-editors.sh.tmp docker/install-editors.sh
-	@echo "Building dev image with all editors..."
-	$(CONTAINER_RUNTIME) build \
-		-t $(IMAGE_NAME):dev \
-		-f docker/Dockerfile.dev \
-		.
-	@echo "Dev image built: $(IMAGE_NAME):dev"
-	@rm -f docker/install-editors.sh
-
-# Ensure the generated install script is gitignored
-docker/install-editors.sh
+	@echo "Dev images built for all editors."
