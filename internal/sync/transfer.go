@@ -495,9 +495,6 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			if filepath.IsAbs(header.Linkname) {
 				return fmt.Errorf("symlink %s has absolute target %q outside destination root", target, header.Linkname)
 			}
-			if strings.Contains(header.Linkname, "..") {
-				return fmt.Errorf("symlink %s target %q escapes destination", target, header.Linkname)
-			}
 			// Verify the symlink target stays within the resolved destination root.
 			effectiveTarget := filepath.Clean(filepath.Join(resolvedParent, header.Linkname))
 			realTarget, evalErr := filepath.EvalSymlinks(effectiveTarget)
@@ -514,6 +511,9 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return fmt.Errorf("mkdir parent %s: %w", filepath.Dir(target), err)
 			}
+			// Remove existing file/symlink before creating the new symlink.
+			// The archive is the source of truth for the session's output.
+			_ = os.Remove(target)
 			if err := os.Symlink(header.Linkname, target); err != nil {
 				return fmt.Errorf("create symlink %s: %w", target, err)
 			}
