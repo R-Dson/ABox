@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Run exclusion unit tests
         run: bash tests/exclusion-unit-test.sh
 
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Bundle source files
         run: make bundle ABX_VERSION="$(git rev-parse --short HEAD)"
       - name: Upload bundle artifact

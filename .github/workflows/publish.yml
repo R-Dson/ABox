@@ -68,7 +68,7 @@ jobs:
         editor: ${{ fromJson(needs.setup-matrix.outputs.matrix_editors) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Load editor config
         id: config
         run: |
@@ -180,7 +180,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3.6.0
       - name: Set up Docker Buildx
