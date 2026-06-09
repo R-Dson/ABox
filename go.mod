@@ -17,7 +17,7 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
-	golang.org/x/sync v0.20.0
+	golang.org/x/sync v0.21.0
 	golang.org/x/term v0.42.0
 )
 
