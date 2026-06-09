@@ -9,7 +9,7 @@ ENV DEFAULT_COMMAND=$COMMAND_NAME
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Install common dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl wget ca-certificates git unzip gosu procps jq ripgrep \
     build-essential locales openssl file bzip2 \
     python3 python3-pip python3-venv nodejs npm \
@@ -36,7 +36,7 @@ RUN curl -fsSL https://bun.sh/install | bash && \
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-    && apt-get update && apt-get install -y gh && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get update && apt-get install -y --no-install-recommends gh && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
 RUN groupadd -g 1000 agent && \

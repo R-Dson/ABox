@@ -1,0 +1,7 @@
+title = "ABox gitleaks config"
+
+[[rules]]
+id = "generic-api-key"
+	description = "Override generic-api-key to reduce false positives in Markdown documentation."
+	# Only flag lines that look like actual key assignments, not prose descriptions.
+	regex = '''(?i)(?:api[_-]?key|apikey|access[_-]?key)\s*[:=]\s*['"]?[a-zA-Z0-9+/]{20,}'''

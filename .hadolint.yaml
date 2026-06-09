@@ -1,0 +1,6 @@
+# Hadolint configuration
+# DL3008 (pin apt versions) is accepted because pinning every package
+# to an exact version breaks across Debian point releases and the
+# Dockerfile already uses digest-pinned base images for reproducibility.
+ignored:
+  - DL3008

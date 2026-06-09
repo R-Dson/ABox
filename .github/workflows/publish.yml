@@ -74,7 +74,6 @@ jobs:
         run: |
           EDITOR="${{ matrix.editor }}"
 
-          # Extract values
           VERSION=$(jq -r ".editors.\"$EDITOR\".version" config/editors.json)
           INSTALL_RAW=$(jq -r ".editors.\"$EDITOR\".install_cmd" config/editors.json)
           CMD=$(jq -r ".editors.\"$EDITOR\".cmd_name" config/editors.json)
@@ -85,14 +84,15 @@ jobs:
             exit 1
           fi
 
-          INSTALL=${INSTALL_RAW//"{version}"/$VERSION}
+          INSTALL=${INSTALL_RAW//"{version}"/"$VERSION"}
 
-          echo "install<<EOF" >> $GITHUB_OUTPUT
-          echo "$INSTALL" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "cmd=$CMD" >> $GITHUB_OUTPUT
+          {
+            echo "install<<EOF"
+            echo "$INSTALL"
+            echo "EOF"
+            echo "version=$VERSION"
+            echo "cmd=$CMD"
+          } >> "$GITHUB_OUTPUT"
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3.6.0
       - name: Set up Docker Buildx
@@ -134,7 +134,7 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           CANONICAL=$(echo "${{ steps.meta.outputs.json }}" | jq -r '.tags[0]')
-          echo "canonical=$CANONICAL" >> $GITHUB_OUTPUT
+          echo "canonical=$CANONICAL" >> "$GITHUB_OUTPUT"
 
       - name: Smoke test image
         run: |
@@ -183,7 +183,7 @@ jobs:
       - name: Sign image
         if: github.event_name != 'pull_request'
         uses: sigstore/cosign-installer@v3.8.2
-      - run: cosign sign --yes ${{ steps.ref.outputs.canonical }}
+      - run: cosign sign --yes "${{ steps.ref.outputs.canonical }}"
         if: github.event_name != 'pull_request'
         env:
           COSIGN_EXPERIMENTAL: 1
@@ -237,7 +237,7 @@ jobs:
           path: sbom-sync.json
       - name: Sign sync image
         uses: sigstore/cosign-installer@v3.8.2
-      - run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sync
+      - run: cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sync"
         env:
           COSIGN_EXPERIMENTAL: 1
 

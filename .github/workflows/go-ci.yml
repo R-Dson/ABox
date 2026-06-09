@@ -52,8 +52,8 @@ jobs:
       - name: Run tests
         run: |
           # cmd/abx is main-only; runtime has pure unit tests and is included.
-          go test -race -coverprofile=coverage.out \
-            $(go list ./... | grep -v -E 'cmd/abx$')
+          PACKAGES=$(go list ./... | grep -v -E 'cmd/abx$')
+          go test -race -coverprofile=coverage.out $PACKAGES
       - name: Check coverage
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
