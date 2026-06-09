@@ -416,6 +416,11 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 	}
 
 	cleanDest := filepath.Clean(dest)
+	resolvedDest, err := filepath.EvalSymlinks(cleanDest)
+	if err != nil {
+		return fmt.Errorf("resolve destination root %s: %w", cleanDest, err)
+	}
+
 	manifest := make(map[string]struct{})
 	tr := tar.NewReader(r)
 	for {
@@ -428,8 +433,12 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 		}
 
 		entryName := cleanArchiveEntryName(header.Name)
-		if entryName == volumeInitializedMarker {
-			// Internal volume lifecycle marker created during sync-in; never write it back to the host.
+		// Reject entries with .. components (path traversal attack).
+		if strings.Contains(entryName, "..") {
+			return fmt.Errorf("tar entry %q escapes destination", entryName)
+		}
+		if entryName == "" || entryName == "." || entryName == volumeInitializedMarker {
+			// Internal volume lifecycle marker or empty entry; skip.
 			continue
 		}
 		if opts.Matcher != nil && opts.Matcher.Match(entryName) {
@@ -438,14 +447,7 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 
 		manifest[entryName] = struct{}{}
 
-		// Sanitize and validate the archive entry path to prevent directory traversal.
-		// CodeQL requires the sanitization to be visible in the same function.
-		target := filepath.Clean(filepath.Join(dest, filepath.FromSlash(entryName)))
-		if rel, err := filepath.Rel(cleanDest, target); err != nil {
-			return fmt.Errorf("checking tar entry %q: %w", entryName, err)
-		} else if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-			return fmt.Errorf("tar entry %q escapes destination", entryName)
-		}
+		target := filepath.Join(cleanDest, filepath.FromSlash(entryName))
 
 		switch header.Typeflag {
 		case tar.TypeDir:
@@ -477,19 +479,14 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 				return fmt.Errorf("close %s: %w", target, err)
 			}
 		case tar.TypeSymlink:
-			// Validate symlink target stays within root.
-			linkTarget := filepath.Clean(filepath.FromSlash(header.Linkname))
-			if linkTarget == "" {
-				return fmt.Errorf("refusing empty symlink target for %s", target)
+			resolvedParent := resolveExistingPath(filepath.Dir(target))
+			if filepath.IsAbs(header.Linkname) {
+				return fmt.Errorf("symlink %s has absolute target %q outside destination root", target, header.Linkname)
 			}
-			if filepath.IsAbs(linkTarget) {
-				return fmt.Errorf("refusing absolute symlink %s -> %s", target, linkTarget)
-			}
-			resolvedLink := filepath.Clean(filepath.Join(filepath.Dir(target), linkTarget))
-			if rel, err := filepath.Rel(cleanDest, resolvedLink); err != nil {
-				return fmt.Errorf("refusing escaping symlink %s -> %s: %w", target, linkTarget, err)
-			} else if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-				return fmt.Errorf("refusing escaping symlink %s -> %s: target escapes root", target, linkTarget)
+			effectiveTarget := filepath.Clean(filepath.Join(resolvedParent, header.Linkname))
+			relTarget, err := filepath.Rel(resolvedDest, effectiveTarget)
+			if err != nil || relTarget == ".." || strings.HasPrefix(relTarget, ".."+string(filepath.Separator)) {
+				return fmt.Errorf("symlink %s points outside destination root: %q", target, header.Linkname)
 			}
 			if err := ensurePathHasNoSymlink(cleanDest, filepath.Dir(target)); err != nil {
 				return err
@@ -497,7 +494,7 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return fmt.Errorf("mkdir parent %s: %w", filepath.Dir(target), err)
 			}
-			if err := os.Symlink(linkTarget, target); err != nil {
+			if err := os.Symlink(header.Linkname, target); err != nil {
 				return fmt.Errorf("create symlink %s: %w", target, err)
 			}
 		}
@@ -540,6 +537,35 @@ func reconcileMissingEntries(root string, snapshot RootSnapshot, manifest map[st
 		}
 	}
 	return nil
+}
+
+// resolveExistingPath resolves symlinks in path as far as components exist on disk.
+// If part of the path doesn't exist yet, it resolves the existing prefix and appends
+// the remaining components verbatim. Returns cleanPath unchanged on any error.
+func resolveExistingPath(cleanPath string) string {
+	resolved, err := filepath.EvalSymlinks(cleanPath)
+	if err == nil {
+		return resolved
+	}
+	// EvalSymlinks failed — walk component by component.
+	parts := strings.Split(filepath.Clean(cleanPath), string(filepath.Separator))
+	current := string(filepath.Separator)
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		next := filepath.Join(current, part)
+		if _, err := os.Lstat(next); err != nil {
+			// Rest doesn't exist; append remaining parts to resolved prefix.
+			return filepath.Join(append([]string{current}, parts[i:]...)...)
+		}
+		eval, err := filepath.EvalSymlinks(next)
+		if err != nil {
+			return cleanPath
+		}
+		current = eval
+	}
+	return current
 }
 
 func cleanArchiveEntryName(name string) string {
