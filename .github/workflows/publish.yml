@@ -1,7 +1,7 @@
 name: Build and Publish ABox Images
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "dev"]
     paths:
       - ".github/workflows/publish.yml"
       - "config/editors.json"
@@ -272,3 +272,60 @@ jobs:
           delete-tags: "sha-*-${{ matrix.editor }}"
           keep-n-tagged: 3
           delete-untagged: true
+
+  publish-dev-image:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3.6.0
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.10.0
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate editor install script
+        run: jq -r '.editors | to_entries[] | "# " + .key + "\n" + .value.install_cmd' config/editors.json > docker/install-editors.sh
+      - name: Build and push dev image
+        uses: docker/build-push-action@v6.16.0
+        with:
+          context: .
+          file: ./docker/Dockerfile.dev
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,scope=dev
+          cache-to: type=gha,mode=max,scope=dev
+      - name: Scan dev image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Generate dev SBOM
+        uses: anchore/sbom-action@v0.18.0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev
+          output-file: sbom-dev.json
+      - name: Upload dev SBOM artifact
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: sbom-dev
+          path: sbom-dev.json
+      - name: Sign dev image
+        uses: sigstore/cosign-installer@v3.8.2
+      - run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev
+        env:
+          COSIGN_EXPERIMENTAL: 1
+      - name: Clean up install script
+        if: always()
+        run: rm -f docker/install-editors.sh

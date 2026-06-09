@@ -111,3 +111,25 @@ go-race-cover:
 	go test -race -coverprofile=coverage.out $(GO_COVER_PACKAGES)
 	go tool cover -func=coverage.out | tail -1
 	rm -f coverage.out
+
+# ── Dev image ──────────────────────────────────────────────────────────
+
+.PHONY: build-dev
+build-dev:
+	@echo "Generating editor install script..."
+	@jq -r '[.editors | to_entries[] | "# " + .key + "\n" + .value.install_cmd] | join("\n")' config/editors.json > docker/install-editors.sh.tmp
+	@# Substitute {version} placeholders with actual versions from the registry.
+	@jq -r '.editors | to_entries[] | "\(.key)=\(.value.version)"' config/editors.json | while IFS='=' read -r key ver; do \
+	    sed -i "s/{version}/$$ver/g" docker/install-editors.sh.tmp ; \
+	done
+	@mv docker/install-editors.sh.tmp docker/install-editors.sh
+	@echo "Building dev image with all editors..."
+	$(CONTAINER_RUNTIME) build \
+		-t $(IMAGE_NAME):dev \
+		-f docker/Dockerfile.dev \
+		.
+	@echo "Dev image built: $(IMAGE_NAME):dev"
+	@rm -f docker/install-editors.sh
+
+# Ensure the generated install script is gitignored
+docker/install-editors.sh
