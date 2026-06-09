@@ -45,7 +45,7 @@ jobs:
       - name: Bundle source files
         run: make bundle ABX_VERSION="$(git rev-parse --short HEAD)"
       - name: Upload bundle artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: abx-script
           path: |
