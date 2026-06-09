@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim
+FROM debian@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG INSTALL_CMD=""
@@ -9,7 +9,7 @@ ENV DEFAULT_COMMAND=$COMMAND_NAME
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Install common dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl wget ca-certificates git unzip gosu procps jq ripgrep \
     build-essential locales openssl file bzip2 \
     python3 python3-pip python3-venv nodejs npm \
@@ -36,7 +36,7 @@ RUN curl -fsSL https://bun.sh/install | bash && \
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-    && apt-get update && apt-get install -y gh && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get update && apt-get install -y --no-install-recommends gh && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
 RUN groupadd -g 1000 agent && \
@@ -56,8 +56,10 @@ ENV PATH="${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:${PATH}"
 # Add local bin to PATH for installers
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Run editor-specific installation logic
-RUN VERSION="$VERSION" eval "$INSTALL_CMD" && \
+# Install editor — passed as explicit build arg, not eval'd.
+# The install command is populated from config/editors.json at build time.
+# SECURITY: Do not change to eval — INSTALL_CMD comes from trusted registry config only.
+RUN VERSION="$VERSION" bash -c "$INSTALL_CMD" && \
     if [ -d /root/.local/bin ]; then cp -rn /root/.local/bin/* /usr/local/bin/ || true; fi
 
 

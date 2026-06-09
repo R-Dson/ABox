@@ -2,7 +2,7 @@ name: Sync Editor Versions
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # Run daily at 06:00 UTC
+    - cron: "0 6 * * *" # Run daily at 06:00 UTC
   workflow_dispatch:
 
 jobs:
@@ -10,21 +10,26 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: write  # Needed to trigger the publish workflow
+      actions: write # Needed to trigger the publish workflow
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
       - name: Sync versions
         run: uv run config/sync_versions.py
 
+      - name: Update registry copies
+        run: |
+          cp config/editors.json internal/config/editors.json
+          cp config/editors.json bin/editors.json
+
       - name: Check for changes
         id: git-check
         run: |
-          git diff --exit-code config/editors.json || echo "changed=true" >> $GITHUB_OUTPUT
+          git diff --exit-code config/editors.json internal/config/editors.json bin/editors.json || echo "changed=true" >> "$GITHUB_OUTPUT"
 
       - name: Detect Changed Editors
         id: detect
@@ -32,19 +37,19 @@ jobs:
         run: |
           CHANGED_EDITORS=$(jq -n \
             --argjson old "$(git show HEAD:config/editors.json | jq .editors)" \
-            --argjson new "$(cat config/editors.json | jq .editors)" \
+            --argjson new "$(jq .editors < config/editors.json)" \
             '$new | to_entries | .[] | select(.value != $old[.key]) | .key' \
             | jq -s -c .)
 
           echo "Detected changes: $CHANGED_EDITORS"
-          echo "editors=$CHANGED_EDITORS" >> $GITHUB_OUTPUT
+          echo "editors=$CHANGED_EDITORS" >> "$GITHUB_OUTPUT"
 
       - name: Commit and push changes
         if: steps.git-check.outputs.changed == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add config/editors.json
+          git add config/editors.json internal/config/editors.json bin/editors.json
           git commit -m "chore: update editor versions [skip ci]"
           git push
 
@@ -58,10 +63,3 @@ jobs:
           gh workflow run publish.yml \
             --ref main \
             -f editors_json="$CHANGES"
-      - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@v2.1.0
-        with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          retain_days: 0
-          keep_minimum_runs: 10

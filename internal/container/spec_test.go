@@ -1,0 +1,488 @@
+package container_test
+
+import (
+	"encoding/json"
+	"net"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/r-dson/abox/internal/config"
+	"github.com/r-dson/abox/internal/container"
+	"github.com/r-dson/abox/internal/runtime"
+)
+
+func TestContainerWorkdir_MatchesDockerfile(t *testing.T) {
+	// container WorkDir must match WORKDIR in docker/Dockerfile.
+	dockerfile, err := os.ReadFile("../../docker/Dockerfile")
+	if err != nil {
+		t.Fatalf("reading Dockerfile: %v", err)
+	}
+	if !strings.Contains(string(dockerfile), "WORKDIR "+container.WorkDir) {
+		t.Fatalf("Dockerfile WORKDIR does not match container WorkDir %q", container.WorkDir)
+	}
+}
+
+func TestBuildSpec_Capabilities(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+
+	sess := container.NewSession("test", nil, container.Volumes{
+		ConfigVol: "abox-config-test",
+		CacheVol:  "abox-cache-test",
+		StateVol:  "abox-state-test",
+		ShareVol:  "abox-share-test",
+	})
+
+	spec := mustBuildSpec(t, profile, sess, "/workspace", &config.Config{})
+
+	tests := []struct {
+		name string
+		got  []string
+		want []string
+	}{
+		{"cap drop", spec.CapDrop, []string{"ALL"}},
+		{"cap add", spec.CapAdd, []string{"CHOWN", "SETUID", "SETGID"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if len(tt.got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", tt.got, tt.want)
+			}
+			for i := range tt.want {
+				if tt.got[i] != tt.want[i] {
+					t.Errorf("got %v, want %v", tt.got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildSpec_NoDACOverride(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/workspace", &config.Config{})
+
+	for _, cap := range spec.CapAdd {
+		if cap == "DAC_OVERRIDE" {
+			t.Error("DAC_OVERRIDE must not be in CapAdd")
+		}
+	}
+}
+
+func TestBuildSpec_SeccompApplied(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/workspace", &config.Config{})
+
+	found := false
+	for _, opt := range spec.SecurityOpt {
+		if len(opt) >= 7 && opt[:7] == "seccomp" {
+			found = true
+			// Extract path and verify file exists
+			break
+		}
+	}
+	if !found {
+		t.Error("no seccomp option in SecurityOpt")
+	}
+}
+
+func TestBuildSpec_WorkingDir(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{})
+
+	if spec.WorkingDir != "/workspace" {
+		t.Errorf("WorkingDir = %q, want /workspace", spec.WorkingDir)
+	}
+}
+
+func TestBuildSpec_EditorDataMountTargets(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{
+		ConfigVol: "abox-config-test",
+		CacheVol:  "abox-cache-test",
+		StateVol:  "abox-state-test",
+		ShareVol:  "abox-share-test",
+	})
+
+	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{})
+
+	want := map[string]bool{
+		"abox-config-test:/home/agent/.claude:z":            false,
+		"abox-cache-test:/home/agent/.cache/claude:z":       false,
+		"abox-state-test:/home/agent/.local/state/claude:z": false,
+		"abox-share-test:/home/agent/.local/share/claude:z": false,
+		"/host/project:/workspace:z":                        false,
+	}
+	for _, bind := range spec.Binds {
+		if _, ok := want[bind]; ok {
+			want[bind] = true
+		}
+		if bind == "abox-config-test:/vol/config:z" {
+			t.Fatalf("config volume mounted at legacy sync path %q", bind)
+		}
+	}
+	for bind, found := range want {
+		if !found {
+			t.Errorf("missing bind %q in %v", bind, spec.Binds)
+		}
+	}
+}
+
+func TestBuildSpec_SanitizedGitConfigWhenEnabled(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[credential]\n\thelper = store\n[user]\n\tname = Real\n\temail = real@example.com\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{ForwardGitConfig: true})
+
+	// Must not mount the raw host .gitconfig
+	for _, bind := range spec.Binds {
+		if strings.Contains(bind, filepath.Join(home, ".gitconfig")) {
+			t.Fatalf("raw host .gitconfig must not be mounted: %q", bind)
+		}
+	}
+
+	// Must include a sanitized gitconfig bind to the container home
+	found := false
+	for _, bind := range spec.Binds {
+		if strings.Contains(bind, ":/home/agent/.gitconfig") {
+			found = true
+			// Extract host-side path and verify contents
+			hostPath := strings.SplitN(bind, ":", 2)[0]
+			data, err := os.ReadFile(hostPath)
+			if err != nil {
+				t.Fatalf("reading sanitized gitconfig: %v", err)
+			}
+			content := string(data)
+			if strings.Contains(content, "credential") {
+				t.Fatal("sanitized gitconfig must not contain credential helper")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing sanitized .gitconfig bind in %v", spec.Binds)
+	}
+}
+
+func TestBuildSpec_GitconfigNotMountedByDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[credential]\n\thelper = store\n"), 0o600); err != nil {
+		t.Fatalf("creating .gitconfig fixture: %v", err)
+	}
+
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{})
+
+	for _, bind := range spec.Binds {
+		if strings.Contains(bind, ".gitconfig") {
+			t.Fatalf("host .gitconfig must not be mounted by default: %q", bind)
+		}
+	}
+}
+
+func TestBuildSpec_DoesNotMountSSHDirectoryFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SSH_AUTH_SOCK", "")
+	if err := os.Mkdir(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatalf("creating .ssh fixture: %v", err)
+	}
+
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{})
+
+	for _, bind := range spec.Binds {
+		if strings.Contains(bind, ".ssh") {
+			t.Fatalf("host .ssh directory must not be mounted implicitly: %q", bind)
+		}
+	}
+}
+
+func TestBuildSpec_DoesNotMountSSHAgentSocketByDefault(t *testing.T) {
+	home := t.TempDir()
+	socketPath := filepath.Join(home, "ssh-agent.sock")
+	t.Setenv("HOME", home)
+	t.Setenv("SSH_AUTH_SOCK", socketPath)
+	if err := os.WriteFile(socketPath, nil, 0o600); err != nil {
+		t.Fatalf("creating ssh agent socket fixture: %v", err)
+	}
+
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{})
+
+	for _, bind := range spec.Binds {
+		if strings.Contains(bind, "ssh-agent.sock") {
+			t.Fatalf("SSH agent socket must not be mounted by default: %q", bind)
+		}
+	}
+	for _, env := range spec.Env {
+		if strings.HasPrefix(env, "SSH_AUTH_SOCK=") {
+			t.Fatalf("SSH_AUTH_SOCK must not be set by default: %q", env)
+		}
+	}
+}
+
+func TestSSHAgentSocketRequiresUnixSocket(t *testing.T) {
+	home := t.TempDir()
+	socketPath := filepath.Join(home, "ssh-agent.sock")
+	t.Setenv("HOME", home)
+	t.Setenv("SSH_AUTH_SOCK", socketPath)
+	if err := os.WriteFile(socketPath, nil, 0o600); err != nil {
+		t.Fatalf("creating regular SSH_AUTH_SOCK fixture: %v", err)
+	}
+
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{ForwardSSHAgent: true})
+
+	for _, bind := range spec.Binds {
+		if strings.Contains(bind, "ssh-agent.sock") {
+			t.Fatalf("regular SSH_AUTH_SOCK file must not be mounted: %q", bind)
+		}
+	}
+	for _, env := range spec.Env {
+		if strings.HasPrefix(env, "SSH_AUTH_SOCK=") {
+			t.Fatalf("regular SSH_AUTH_SOCK file must not set env: %q", env)
+		}
+	}
+}
+
+func TestBuildSpec_MountsSSHAgentSocketWhenEnabled(t *testing.T) {
+	home := t.TempDir()
+	socketPath := filepath.Join(home, "ssh-agent.sock")
+	t.Setenv("HOME", home)
+	t.Setenv("SSH_AUTH_SOCK", socketPath)
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("creating unix socket fixture: %v", err)
+	}
+	defer listener.Close()
+
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{ForwardSSHAgent: true})
+
+	want := socketPath + ":/tmp/ssh-agent.sock:ro,z"
+	for _, bind := range spec.Binds {
+		if bind == want {
+			return
+		}
+	}
+	t.Fatalf("missing SSH agent bind %q in %v", want, spec.Binds)
+}
+
+func TestBuildSpec_FileConfigProfileUsesSymlinkWrapper(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("aider")
+	sess := container.NewSession("test", nil, container.Volumes{
+		ConfigVol: "abox-config-test",
+		CacheVol:  "abox-cache-test",
+		StateVol:  "abox-state-test",
+		ShareVol:  "abox-share-test",
+	})
+
+	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{})
+
+	foundConfigBind := false
+	for _, bind := range spec.Binds {
+		if bind == "abox-config-test:/vol/config:z" {
+			foundConfigBind = true
+		}
+		if bind == "abox-config-test:/home/agent/.aider.conf.yml:z" {
+			t.Fatalf("file config volume must not mount directly to file path: %q", bind)
+		}
+	}
+	if !foundConfigBind {
+		t.Fatalf("missing file config bind to /vol/config in %v", spec.Binds)
+	}
+	if len(spec.Cmd) != 4 || spec.Cmd[0] != "sh" || spec.Cmd[1] != "-lc" || spec.Cmd[3] != "aider" {
+		t.Fatalf("file config command should be shell wrapper with argv0 placeholder, got %v", spec.Cmd)
+	}
+	if !strings.Contains(spec.Cmd[2], "ln -sf /vol/config/.aider.conf.yml /home/agent/.aider.conf.yml") {
+		t.Fatalf("file config command missing symlink setup: %q", spec.Cmd[2])
+	}
+	if !strings.Contains(spec.Cmd[2], "exec aider \"$@\"") {
+		t.Fatalf("file config command missing editor exec with arg forwarding: %q", spec.Cmd[2])
+	}
+}
+
+func TestBuildSpec_ImageFromProfile(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/workspace", &config.Config{})
+
+	if spec.Image != "ghcr.io/r-dson/abox:claude" {
+		t.Errorf("Image = %q, want ghcr.io/r-dson/abox:claude", spec.Image)
+	}
+}
+
+func TestBuildSpec_ResourceHardening(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/workspace", &config.Config{})
+
+	if !spec.Init {
+		t.Fatal("Init = false, want true")
+	}
+	if spec.PidsLimit <= 0 {
+		t.Fatalf("PidsLimit = %d, want bounded positive value", spec.PidsLimit)
+	}
+}
+
+func TestBuildSpec_NoNewPrivileges(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	spec := mustBuildSpec(t, profile, sess, "/workspace", &config.Config{})
+
+	found := false
+	for _, opt := range spec.SecurityOpt {
+		if opt == "no-new-privileges" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("no-new-privileges not in SecurityOpt")
+	}
+}
+
+func TestSeccompProfilePath_UsesProductionConfig(t *testing.T) {
+	path, err := container.SeccompProfilePath()
+	if err != nil {
+		t.Fatalf("SeccompProfilePath() error: %v", err)
+	}
+	materialized := readCanonicalJSON(t, path)
+	production := readCanonicalJSON(t, filepath.Join("..", "..", "config", "seccomp", "abox-default.json"))
+	if string(materialized) != string(production) {
+		t.Fatal("materialized seccomp profile differs from config/seccomp/abox-default.json")
+	}
+}
+
+func TestSeccompProfileIsValid(t *testing.T) {
+	path, err := container.SeccompProfilePath()
+	if err != nil {
+		t.Fatalf("SeccompProfilePath() error: %v", err)
+	}
+	if path == "" {
+		t.Fatal("SeccompProfilePath() returned empty string")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("cannot read seccomp profile at %s: %v", path, err)
+	}
+	if !json.Valid(data) {
+		t.Fatal("seccomp profile is not valid JSON")
+	}
+}
+
+func TestBuildSpec_ImmutabilityCopiesSlices(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{
+		ConfigVol: "c",
+		CacheVol:  "cache",
+		StateVol:  "state",
+		ShareVol:  "share",
+	})
+
+	spec := mustBuildSpec(t, profile, sess, "/workspace", &config.Config{})
+
+	// Mutate returned slices and verify the second call returns unmodified values.
+	spec.CapDrop[0] = "MUTATED"
+	spec.CapAdd[0] = "MUTATED"
+	spec.SecurityOpt[0] = "MUTATED"
+	spec.Binds[0] = "MUTATED"
+	spec.Env[0] = "MUTATED"
+
+	spec2 := mustBuildSpec(t, profile, sess, "/workspace", &config.Config{})
+	if spec2.CapDrop[0] == "MUTATED" {
+		t.Fatal("CapDrop slice was shared across calls")
+	}
+	if spec2.CapAdd[0] == "MUTATED" {
+		t.Fatal("CapAdd slice was shared across calls")
+	}
+	if spec2.SecurityOpt[0] == "MUTATED" {
+		t.Fatal("SecurityOpt slice was shared across calls")
+	}
+	if spec2.Binds[0] == "MUTATED" {
+		t.Fatal("Binds slice was shared across calls")
+	}
+	if spec2.Env[0] == "MUTATED" {
+		t.Fatal("Env slice was shared across calls")
+	}
+}
+
+func TestBuildSpec_ReturnsInvalidMemoryLimitError(t *testing.T) {
+	registry, _ := config.LoadEditorRegistry()
+	profile, _ := registry.Get("claude")
+	sess := container.NewSession("test", nil, container.Volumes{})
+
+	_, err := container.BuildSpec(profile, sess, "/workspace", &config.Config{MemoryLimit: "not-memory"})
+	if err == nil {
+		t.Fatal("expected invalid memory limit error")
+	}
+}
+
+func readCanonicalJSON(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading JSON %s: %v", path, err)
+	}
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		t.Fatalf("parsing JSON %s: %v", path, err)
+	}
+	canonical, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("canonicalizing JSON %s: %v", path, err)
+	}
+	return canonical
+}
+
+func mustBuildSpec(t *testing.T, profile config.EditorProfile, sess *container.Session, workdir string, cfg *config.Config) runtime.ContainerSpec {
+	t.Helper()
+	spec, err := container.BuildSpec(profile, sess, workdir, cfg)
+	if err != nil {
+		t.Fatalf("BuildSpec() error: %v", err)
+	}
+	return spec
+}

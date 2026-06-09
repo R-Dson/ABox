@@ -1,7 +1,17 @@
 # Build artifacts
-build/
-bin/abx
+/build/
+/bin/*
 *.x.c
+/abx
+/test_new
+/test_wg
+*.test
+coverage.out
+dist/
+
+# Local env files
+.env
+.abxenv
 
 # Editor-specific
 .vscode/
@@ -12,3 +22,5 @@ bin/abx
 # OS-specific
 .DS_Store
 Thumbs.db
+.pi-codebase.json
+__pycache__/

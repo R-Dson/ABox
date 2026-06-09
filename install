@@ -3,25 +3,37 @@ set -e
 
 # ABox Installation Script
 # Usage: curl -fsSL https://raw.githubusercontent.com/R-Dson/ABox/main/install | bash
+#
+# Downloads a static Go binary — no runtime dependencies needed.
+# Editor registry is embedded in the binary.
 
 REPO="R-Dson/ABox"
 BINARY_NAME="abx"
-RELEASE_URL="https://github.com/$REPO/releases/latest/download/$BINARY_NAME"
-JSON_URL="https://github.com/$REPO/releases/latest/download/editors.json"
 
 echo "ABox Installation"
 echo "-------------------"
 
-# Check if curl is installed
-if ! command -v curl >/dev/null 2>&1; then
-    echo "Error: curl is required for installation."
+# Detect platform
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+case "$ARCH" in
+    x86_64)  ARCH="amd64" ;;
+    aarch64) ARCH="arm64" ;;
+    arm64)   ARCH="arm64" ;;
+    *)       echo "Error: unsupported architecture $ARCH"; exit 1 ;;
+esac
+
+if [ "$OS" != "linux" ] && [ "$OS" != "darwin" ]; then
+    echo "Error: unsupported OS $OS (supported: linux, darwin)"
     exit 1
 fi
 
+ARTIFACT="${BINARY_NAME}_${OS}_${ARCH}.tar.gz"
+RELEASE_URL="https://github.com/$REPO/releases/latest/download/$ARTIFACT"
+CHECKSUM_URL="https://github.com/$REPO/releases/latest/download/checksums.txt"
+
 # Ask for installation type
 if [ -t 0 ] || [ -c /dev/tty ]; then
-    # Redirect stdin to tty to allow pipe-based installation (curl | bash)
-    # Using || true to handle cases where /dev/tty exists but cannot be opened
     read -rp "Install system-wide (/usr/local/bin)? [Y/n]: " choice < /dev/tty || choice="Y"
 else
     choice="Y"
@@ -39,82 +51,81 @@ case $choice in
         mkdir -p "$INSTALL_DIR"
         ;;
     *)
-        echo "Invalid option. Defaulting to User-local (~/.local/bin)."
+        echo "Invalid option. Defaulting to user-local (~/.local/bin)."
         INSTALL_DIR="$HOME/.local/bin"
         USE_SUDO=false
         mkdir -p "$INSTALL_DIR"
         ;;
 esac
 
-# Download script from GitHub releases
-echo "Downloading abx script from GitHub releases..."
-if ! curl -fsSL "$RELEASE_URL" -o "$BINARY_NAME"; then
+sha256_file() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | cut -d' ' -f1
+        return
+    fi
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | cut -d' ' -f1
+        return
+    fi
+    if command -v openssl >/dev/null 2>&1; then
+        openssl dgst -sha256 "$1" | awk '{print $NF}'
+        return
+    fi
+    echo "Error: no SHA-256 tool found (need sha256sum, shasum, or openssl)." >&2
+    return 1
+}
+
+TMPDIR="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR"' EXIT
+
+# Download binary archive
+echo "Downloading $ARTIFACT..."
+if ! curl -fsSL "$RELEASE_URL" -o "$TMPDIR/$ARTIFACT"; then
     echo "Error: Failed to download abx."
     echo "Please check that a release exists at: $RELEASE_URL"
     exit 1
 fi
 
-# Download editors.json
-echo "Downloading editor registry..."
-if ! curl -fsSL "$JSON_URL" -o "editors.json"; then
-    echo "Warning: Failed to download editors.json. Editor list may be incomplete."
-fi
-
-# Verify SHA-256 checksums
+# Verify SHA-256 checksum
 echo "Verifying integrity..."
-CHECKSUM_URL="${RELEASE_URL}.sha256"
-JSON_CHECKSUM_URL="${JSON_URL}.sha256"
-
-if curl -fsSL "$CHECKSUM_URL" -o "${BINARY_NAME}.sha256" 2>/dev/null; then
-    if ! sha256sum --check "${BINARY_NAME}.sha256" --status 2>/dev/null; then
-        echo "Error: SHA-256 verification failed for $BINARY_NAME."
-        echo "The download may be corrupted or tampered with."
-        rm -f "$BINARY_NAME" "${BINARY_NAME}.sha256" editors.json
-        exit 1
-    fi
-    rm -f "${BINARY_NAME}.sha256"
-    echo "Integrity verified."
-else
-    echo "Warning: Checksum not available. Skipping integrity verification."
+if ! curl -fsSL "$CHECKSUM_URL" -o "$TMPDIR/checksums.txt" 2>/dev/null; then
+    echo "Error: checksum file not available at $CHECKSUM_URL"
+    exit 1
 fi
+EXPECTED="$(grep "  $ARTIFACT$" "$TMPDIR/checksums.txt" | awk '{print $1}')"
+if [ -z "$EXPECTED" ]; then
+    echo "Error: checksum entry for $ARTIFACT not found."
+    exit 1
+fi
+ACTUAL="$(sha256_file "$TMPDIR/$ARTIFACT")"
+if [ "$EXPECTED" != "$ACTUAL" ]; then
+    echo "Error: SHA-256 verification failed."
+    echo "Expected: $EXPECTED"
+    echo "Actual:   $ACTUAL"
+    exit 1
+fi
+echo "Integrity verified."
 
-# Make executable
-chmod +x "$BINARY_NAME"
+# Extract and install
+tar -xzf "$TMPDIR/$ARTIFACT" -C "$TMPDIR" "$BINARY_NAME"
+chmod +x "$TMPDIR/$BINARY_NAME"
 
-# Move to install directory
 echo "Installing to $INSTALL_DIR..."
-if [ "$USE_SUDO" = true ]; then
-    if [ -w "$INSTALL_DIR" ]; then
-        mv "$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
-    else
-        echo "Sudo access required for $INSTALL_DIR"
-        sudo mv "$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
-    fi
+if [ "$USE_SUDO" = true ] && [ ! -w "$INSTALL_DIR" ]; then
+    sudo mv "$TMPDIR/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
 else
-    mv "$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+    mv "$TMPDIR/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
 fi
 
-# Install editors.json alongside the binary
-SHARE_DIR="$(dirname "$INSTALL_DIR")/share/abx"
-if [ -f "editors.json" ]; then
-    mkdir -p "$SHARE_DIR"
-    if [ "$USE_SUDO" = true ] && [ ! -w "$SHARE_DIR" ]; then
-        sudo cp editors.json "$SHARE_DIR/editors.json"
-    else
-        cp editors.json "$SHARE_DIR/editors.json"
-    fi
-    rm -f editors.json
-fi
-
+echo ""
 echo "ABox has been installed successfully!"
 
 # Verify PATH
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     echo ""
     echo "WARNING: $INSTALL_DIR is not in your PATH."
-    echo "You may need to add it to your shell configuration (e.g., .bashrc or .zshrc):"
-    echo "export PATH=\"\$PATH:$INSTALL_DIR\""
+    echo "Add it to your shell configuration:"
+    echo "  export PATH=\"\$PATH:$INSTALL_DIR\""
 fi
 
-echo ""
 echo "Run 'abx' to start."
