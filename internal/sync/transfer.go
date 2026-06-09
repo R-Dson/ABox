@@ -220,6 +220,10 @@ func TarManifest(r io.Reader, opts Options) (map[string]struct{}, error) {
 		if err != nil {
 			return nil, fmt.Errorf("reading tar: %w", err)
 		}
+		// Sanitize: skip entries with path traversal or absolute paths.
+		if strings.Contains(header.Name, "..") || filepath.IsAbs(header.Name) {
+			continue
+		}
 		entryName := cleanArchiveEntryName(header.Name)
 		if entryName == "." || entryName == volumeInitializedMarker {
 			continue
@@ -432,13 +436,16 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			return fmt.Errorf("reading tar: %w", err)
 		}
 
-		entryName := cleanArchiveEntryName(header.Name)
-		// Reject entries with .. components (path traversal attack).
-		if strings.Contains(entryName, "..") {
-			return fmt.Errorf("tar entry %q escapes destination", entryName)
+		// Sanitize the archive entry name: reject path traversal before any filesystem use.
+		if strings.Contains(header.Name, "..") {
+			return fmt.Errorf("tar entry %q escapes destination", header.Name)
 		}
+		if filepath.IsAbs(header.Name) {
+			continue
+		}
+
+		entryName := cleanArchiveEntryName(header.Name)
 		if entryName == "" || entryName == "." || entryName == volumeInitializedMarker {
-			// Internal volume lifecycle marker or empty entry; skip.
 			continue
 		}
 		if opts.Matcher != nil && opts.Matcher.Match(entryName) {
@@ -479,13 +486,26 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 				return fmt.Errorf("close %s: %w", target, err)
 			}
 		case tar.TypeSymlink:
-			resolvedParent := resolveExistingPath(filepath.Dir(target))
+			// Resolve symlinks in the parent directory to detect previously-extracted
+			// symlinks that could redirect the new link outside the root.
+			resolvedParent, evalErr := filepath.EvalSymlinks(filepath.Dir(target))
+			if evalErr != nil {
+				resolvedParent = filepath.Dir(target)
+			}
 			if filepath.IsAbs(header.Linkname) {
 				return fmt.Errorf("symlink %s has absolute target %q outside destination root", target, header.Linkname)
 			}
+			if strings.Contains(header.Linkname, "..") {
+				return fmt.Errorf("symlink %s target %q escapes destination", target, header.Linkname)
+			}
+			// Verify the symlink target stays within the resolved destination root.
 			effectiveTarget := filepath.Clean(filepath.Join(resolvedParent, header.Linkname))
-			relTarget, err := filepath.Rel(resolvedDest, effectiveTarget)
-			if err != nil || relTarget == ".." || strings.HasPrefix(relTarget, ".."+string(filepath.Separator)) {
+			realTarget, evalErr := filepath.EvalSymlinks(effectiveTarget)
+			if evalErr == nil {
+				effectiveTarget = realTarget
+			}
+			relTarget, relErr := filepath.Rel(resolvedDest, effectiveTarget)
+			if relErr != nil || relTarget == ".." || strings.HasPrefix(relTarget, ".."+string(filepath.Separator)) {
 				return fmt.Errorf("symlink %s points outside destination root: %q", target, header.Linkname)
 			}
 			if err := ensurePathHasNoSymlink(cleanDest, filepath.Dir(target)); err != nil {
@@ -537,35 +557,6 @@ func reconcileMissingEntries(root string, snapshot RootSnapshot, manifest map[st
 		}
 	}
 	return nil
-}
-
-// resolveExistingPath resolves symlinks in path as far as components exist on disk.
-// If part of the path doesn't exist yet, it resolves the existing prefix and appends
-// the remaining components verbatim. Returns cleanPath unchanged on any error.
-func resolveExistingPath(cleanPath string) string {
-	resolved, err := filepath.EvalSymlinks(cleanPath)
-	if err == nil {
-		return resolved
-	}
-	// EvalSymlinks failed — walk component by component.
-	parts := strings.Split(filepath.Clean(cleanPath), string(filepath.Separator))
-	current := string(filepath.Separator)
-	for i, part := range parts {
-		if part == "" {
-			continue
-		}
-		next := filepath.Join(current, part)
-		if _, err := os.Lstat(next); err != nil {
-			// Rest doesn't exist; append remaining parts to resolved prefix.
-			return filepath.Join(append([]string{current}, parts[i:]...)...)
-		}
-		eval, err := filepath.EvalSymlinks(next)
-		if err != nil {
-			return cleanPath
-		}
-		current = eval
-	}
-	return current
 }
 
 func cleanArchiveEntryName(name string) string {
