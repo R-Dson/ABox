@@ -1,25 +1,25 @@
 name: Build and Publish ABox Images
 on:
   push:
-    branches: ['main']
+    branches: ["main"]
     paths:
-      - '.github/workflows/publish.yml'
-      - 'config/editors.json'
-      - 'docker/**'
+      - ".github/workflows/publish.yml"
+      - "config/editors.json"
+      - "docker/**"
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
     branches:
       - main
     paths:
-      - 'config/editors.json'
-      - 'docker/**'
+      - "config/editors.json"
+      - "docker/**"
   workflow_dispatch:
     inputs:
       editors_json:
         description: 'JSON array of editors to build (e.g. ["claude", "vibe"])'
         required: false
-        default: ''
+        default: ""
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: r-dson/abox
@@ -164,7 +164,7 @@ jobs:
         with:
           image-ref: ${{ steps.ref.outputs.canonical }}
           severity: HIGH,CRITICAL
-          exit-code: '1'
+          exit-code: "1"
 
       - name: Generate SBOM
         if: github.event_name != 'pull_request'
@@ -224,7 +224,7 @@ jobs:
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sync
           severity: HIGH,CRITICAL
-          exit-code: '1'
+          exit-code: "1"
       - name: Generate sync SBOM
         uses: anchore/sbom-action@v0.18.0
         with:
@@ -250,7 +250,8 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        editor: [opencode, claude, aider, copilot, vibe, goose, codex, gemini, pi]
+        editor:
+          [opencode, claude, aider, copilot, vibe, goose, codex, gemini, pi]
     steps:
       - name: Clean up old ${{ matrix.editor }} images
         uses: dataaxiom/ghcr-cleanup-action@v1.4.0

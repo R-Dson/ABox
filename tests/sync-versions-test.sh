@@ -2,8 +2,8 @@
 set -euo pipefail
 
 fail() {
-    echo "FAIL: $*" >&2
-    exit 1
+	echo "FAIL: $*" >&2
+	exit 1
 }
 
 script=config/sync_versions.py
@@ -22,7 +22,7 @@ grep -qE '(raise|sys\.exit|exit\()' "$script" || fail "sync_versions.py must exi
 
 # 5. Must use UTF-8 encoding for reads and writes
 if grep -q 'open(' "$script"; then
-    grep -q 'encoding=' "$script" || fail "sync_versions.py must use explicit encoding= for file I/O"
+	grep -q 'encoding=' "$script" || fail "sync_versions.py must use explicit encoding= for file I/O"
 fi
 
 # 6. Must use atomic writes (temp file + os.replace)

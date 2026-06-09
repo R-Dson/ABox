@@ -78,7 +78,9 @@ def main() -> None:
             latest = get_latest_pypi(identifier)
 
         if latest is None:
-            print(f"Warning: could not fetch latest version for {editor}", file=sys.stderr)
+            print(
+                f"Warning: could not fetch latest version for {editor}", file=sys.stderr
+            )
             continue
 
         clean_version = latest.lstrip("v")
@@ -102,6 +104,7 @@ def main() -> None:
         except BaseException:
             # Clean up temp file on any error
             import contextlib
+
             with contextlib.suppress(OSError):
                 os.unlink(tmp_path)
             raise

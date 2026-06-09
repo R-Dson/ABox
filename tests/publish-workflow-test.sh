@@ -2,8 +2,8 @@
 set -euo pipefail
 
 fail() {
-    echo "FAIL: $*" >&2
-    exit 1
+	echo "FAIL: $*" >&2
+	exit 1
 }
 
 workflow=.github/workflows/publish.yml
@@ -14,20 +14,20 @@ grep -q 'jq -e' "$workflow" || fail "setup-matrix must validate JSON with jq -e"
 
 # 2. PR builds must not execute changed INSTALL_CMD — only build (no push), use baseline install
 if grep -A5 'pull_request' "$workflow" | grep -q 'INSTALL_CMD'; then
-    fail "PR builds must not use repo-changed INSTALL_CMD"
+	fail "PR builds must not use repo-changed INSTALL_CMD"
 fi
 grep -q 'github.event_name.*pull_request' "$workflow" || fail "publish must gate push/scan/sign on PR"
 
 # 3. Trivy must be version-pinned (not @master)
 if grep -q 'trivy-action@master' "$workflow"; then
-    fail "trivy-action must be version-pinned, not @master"
+	fail "trivy-action must be version-pinned, not @master"
 fi
 
 # 4. Third-party actions must be version-pinned (no @master or @main for actions)
 for bad in '@master' '@main'; do
-    if grep -q "uses:.*$bad" "$workflow"; then
-        fail "third-party action uses $bad — must be version-pinned"
-    fi
+	if grep -q "uses:.*$bad" "$workflow"; then
+		fail "third-party action uses $bad — must be version-pinned"
+	fi
 done
 
 # 5. Signing jobs must grant id-token: write
@@ -47,7 +47,7 @@ grep -qi 'smoke' "$workflow" || grep -q 'docker run' "$workflow" || fail "publis
 
 # 9. Scan/SBOM/sign uses canonical single tag
 if grep -q 'image-ref.*steps.meta.outputs.tags' "$workflow"; then
-    fail "scan must use canonical ref (steps.ref.outputs.canonical), not multi-tag string"
+	fail "scan must use canonical ref (steps.ref.outputs.canonical), not multi-tag string"
 fi
 grep -q 'steps.ref.outputs.canonical' "$workflow" || fail "scan/SBOM/sign must use canonical image reference"
 
