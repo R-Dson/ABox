@@ -1,0 +1,72 @@
+FROM debian@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV DEFAULT_COMMAND=opencode
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Install common dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl wget ca-certificates git unzip gosu procps jq ripgrep \
+    build-essential locales openssl file bzip2 \
+    python3 python3-pip python3-venv nodejs npm \
+    nano vim && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set locale
+RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    locale-gen
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
+
+# Install uv (modern python manager)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /usr/local/bin/uv && \
+    mv /root/.local/bin/uvx /usr/local/bin/uvx
+
+# Install Bun (fast JS/TS manager)
+RUN curl -fsSL https://bun.sh/install | bash && \
+    mv /root/.bun/bin/bun /usr/local/bin/bun
+
+# Install GitHub CLI (gh)
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/githubcli.list > /dev/null \
+    && apt-get update && apt-get install -y --no-install-recommends gh && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -g 1000 agent && \
+    useradd -u 1000 -g agent -m -s /bin/bash agent
+
+# Install Homebrew (Linuxbrew)
+ENV HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+ENV HOMEBREW_CELLAR=/home/linuxbrew/.linuxbrew/Cellar
+ENV HOMEBREW_REPOSITORY=/home/linuxbrew/.linuxbrew/Homebrew
+RUN mkdir -p /home/linuxbrew/.linuxbrew && \
+    chown -R agent:agent /home/linuxbrew && \
+    gosu agent bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Add Homebrew to PATH
+ENV PATH="${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:${PATH}"
+
+# Add local bin to PATH for installers
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Install all editors for the dev image.
+# The Makefile generates install-editors.sh from config/editors.json.
+# Each line is a separate install command from the trusted registry.
+# SECURITY: Do not pass user input into the script — only trusted registry data.
+COPY install-editors.sh /tmp/install-editors.sh
+RUN bash /tmp/install-editors.sh && \
+    if [ -d /root/.local/bin ]; then cp -rn /root/.local/bin/* /usr/local/bin/ || true; fi
+
+# Copy generic entrypoint
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Setup workspace
+RUN mkdir -p /workspace && chown agent:agent /workspace
+WORKDIR /workspace
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

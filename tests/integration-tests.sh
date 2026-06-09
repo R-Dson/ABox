@@ -26,6 +26,11 @@ fi
 IMAGE_NAME=${IMAGE_NAME:-"ghcr.io/r-dson/abox:opencode"}
 ABX_BIN="$(dirname "$0")/../bin/abx"
 
+if [[ ! -f "$ABX_BIN" ]]; then
+    echo "Bundle not found at $ABX_BIN. Running 'make bundle'..."
+    (cd "$(dirname "$0")/.." && make bundle ABX_VERSION=test 2>&1)
+fi
+
 echo "=========================================="
 echo "ABox Integration Tests"
 echo "Using: ${CONTAINER_CMD:-none}"
@@ -56,10 +61,13 @@ run_test() {
     local test_name="$1"
     local test_cmd="$2"
     local expected="$3"
+    local err_file
+    err_file=$(mktemp)
 
     echo -n "Running: $test_name ... "
 
-    if eval "$test_cmd" > /dev/null 2>&1; then
+    if eval "$test_cmd" > /dev/null 2>"$err_file"; then
+        rm -f "$err_file"
         if [[ "$expected" == "pass" ]]; then
             echo -e "${GREEN}PASS${NC}"
             PASS_COUNT=$((PASS_COUNT + 1))
@@ -70,13 +78,18 @@ run_test() {
         fi
     else
         if [[ "$expected" == "fail" ]]; then
+            rm -f "$err_file"
             echo -e "${GREEN}PASS${NC}"
             PASS_COUNT=$((PASS_COUNT + 1))
             return 0
         else
             echo -e "${RED}FAIL${NC}"
+            echo "  stderr:"
+            cat "$err_file" | head -10 | sed 's/^/    /'
+            rm -f "$err_file"
             exit 1
         fi
+
     fi
 }
 

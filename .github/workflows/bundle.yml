@@ -1,22 +1,22 @@
 name: Bundle ABox Script
 on:
   push:
-    branches: ['main']
+    branches: ["main"]
     paths:
-      - '.github/workflows/bundle.yml'
-      - 'src/**'
-      - 'Makefile'
-      - 'tests/**'
+      - ".github/workflows/bundle.yml"
+      - "src/**"
+      - "Makefile"
+      - "tests/**"
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
     branches:
       - main
     paths:
-      - '.github/workflows/bundle.yml'
-      - 'src/**'
-      - 'Makefile'
-      - 'tests/**'
+      - ".github/workflows/bundle.yml"
+      - "src/**"
+      - "Makefile"
+      - "tests/**"
 
 jobs:
   test:
@@ -27,6 +27,15 @@ jobs:
       - name: Run exclusion unit tests
         run: bash tests/exclusion-unit-test.sh
 
+      - name: Run exclusion fuzz tests
+        run: ABX_FUZZ_COUNT=200 bash tests/exclusion-fuzz.sh
+
+      - name: Run editor registry tests
+        run: bash tests/editor-registry-test.sh
+
+      - name: Run sync unit tests
+        run: bash tests/sync-unit-test.sh
+
   bundle:
     needs: [test]
     runs-on: ubuntu-latest
@@ -34,12 +43,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Bundle source files
-        run: make bundle ABX_VERSION=$(git rev-parse --short HEAD)
+        run: make bundle ABX_VERSION="$(git rev-parse --short HEAD)"
       - name: Upload bundle artifact
         uses: actions/upload-artifact@v4
         with:
           name: abx-script
-          path: bin/abx
+          path: |
+            bin/abx
+            bin/editors.json
           retention-days: 1
 
   release:
@@ -54,12 +65,21 @@ jobs:
         with:
           name: abx-script
           path: bin/
+      - name: Generate SHA-256 checksum
+        run: |
+          cd bin
+          sha256sum abx > abx.sha256
+          sha256sum editors.json > editors.json.sha256
       - name: Create/Update GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          files: bin/abx
+          files: |
+            bin/abx
+            bin/abx.sha256
+            bin/editors.json
+            bin/editors.json.sha256
           tag_name: latest
-          name: 'Latest Build (Main)'
+          name: "Latest Build (Main)"
           prerelease: false
           generate_release_notes: false
         env:

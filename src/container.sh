@@ -46,8 +46,10 @@ build_config_mounts() {
         mounts="$mounts -v $HOME/.gitconfig:/home/agent/.gitconfig:ro,z"
     fi
 
-    # Mount SSH keys if they exist
-    if [[ -d "$HOME/.ssh" ]]; then
+    # Mount SSH: prefer agent socket forwarding (more secure) over directory mount
+    if [[ -n "$SSH_AUTH_SOCK" && -S "$SSH_AUTH_SOCK" ]]; then
+        mounts="$mounts -v $SSH_AUTH_SOCK:/tmp/ssh-agent.sock -e SSH_AUTH_SOCK=/tmp/ssh-agent.sock"
+    elif [[ -d "$HOME/.ssh" ]]; then
         mounts="$mounts -v $HOME/.ssh:/home/agent/.ssh:ro,z"
     fi
 
@@ -98,11 +100,20 @@ run_container() {
     shift 2
     
     local network_flags=""
+    local strict_net_name=""
     if [[ "$CLI_NO_INTERNET" == "true" ]]; then
         network_flags="--network none"
     elif [[ "$CLI_STRICT_NETWORK" == "true" ]]; then
-        # Block common cloud metadata hostnames to prevent SSRF
-        network_flags="--add-host metadata:127.0.0.1 --add-host metadata.google.internal:127.0.0.1 --add-host 169.254.169.254:127.0.0.1"
+        # Create an isolated Docker network with no external egress
+        STRICT_NET_NAME="abox-strict-$VOL_ID"
+        $CONTAINER_RUNTIME network create --internal "$STRICT_NET_NAME" > /dev/null 2>&1 || true
+        network_flags="--network $STRICT_NET_NAME"
+    fi
+    
+    local seccomp_flag=""
+    local seccomp_path="${ABOX_SECCOMP:-/etc/abox/seccomp.json}"
+    if [[ -f "$seccomp_path" ]]; then
+        seccomp_flag="--security-opt seccomp=$seccomp_path"
     fi
     
     $CONTAINER_RUNTIME run --rm $INTERACTIVE_FLAGS \
@@ -119,8 +130,8 @@ run_container() {
         --cap-add=CHOWN \
         --cap-add=SETUID \
         --cap-add=SETGID \
-        --cap-add=DAC_OVERRIDE \
         --security-opt=no-new-privileges \
+        $seccomp_flag \
         $WORKSPACE_MOUNT \
         $CONFIG_MOUNTS \
         "$image_name" "$exec_cmd" "$@"
@@ -181,6 +192,10 @@ setup_volume_cleanup() {
             $CONTAINER_RUNTIME volume rm "$WORKSPACE_VOL" > /dev/null 2>&1
         fi
         $CONTAINER_RUNTIME volume rm "$CONFIG_VOL" "$CACHE_VOL" "$STATE_VOL" "$SHARE_VOL" > /dev/null 2>&1
+        # Clean up strict network if created
+        if [[ -n "$STRICT_NET_NAME" ]]; then
+            $CONTAINER_RUNTIME network rm "$STRICT_NET_NAME" > /dev/null 2>&1 || true
+        fi
     }
     trap cleanup EXIT
 }
@@ -198,9 +213,11 @@ init_volume_ownership() {
         chown_targets="$chown_targets /workspace"
     fi
     
+    # Source SYNC_IMAGE constant from sync.sh
+    local sync_img="${SYNC_IMAGE:-$IMAGE_NAME}"
     $CONTAINER_RUNTIME run --rm \
         --user 0:0 \
         --entrypoint sh \
         $vol_mounts \
-        $IMAGE_NAME -c "chown -R $HOST_UID:$HOST_GID $chown_targets"
+        $sync_img -c "chown -R $HOST_UID:$HOST_GID $chown_targets"
 }

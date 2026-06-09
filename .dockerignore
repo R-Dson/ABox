@@ -1,0 +1,29 @@
+.git
+.gitignore
+.dockerignore
+.goreleaser.yml
+.pi-codebase.json
+
+# Build/test artifacts
+abx
+bin/
+build/
+dist/
+coverage.out
+*.test
+test_new
+test_wg
+
+# Go caches are never needed in image context
+.gocache/
+
+# Legacy and local test material not needed for editor images
+tests/
+src/
+
+# Editor/OS noise
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*~

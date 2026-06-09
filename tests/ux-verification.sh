@@ -68,8 +68,8 @@ if [ $AVG_TIME -lt 1500 ]; then
     echo -e "  ${GREEN}PASS${NC}: Startup time ${AVG_TIME}ms < 1500ms target"
     ((PASS_COUNT++))
 else
-    echo -e "  ${YELLOW}WARN${NC}: Startup time ${AVG_TIME}ms exceeds 1500ms target"
-    ((PASS_COUNT++))  # Still count as pass since it's not a hard failure
+    echo -e "  ${RED}FAIL${NC}: Startup time ${AVG_TIME}ms exceeds 1500ms target"
+    ((FAIL_COUNT++))
 fi
 echo
 

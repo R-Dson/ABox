@@ -1,0 +1,12 @@
+# Security-sensitive project surfaces
+/.github/workflows/ @R-Dson
+/docker/ @R-Dson
+/go.mod @R-Dson
+/go.sum @R-Dson
+/.goreleaser.yml @R-Dson
+/install @R-Dson
+/internal/sync/ @R-Dson
+/internal/container/ @R-Dson
+/internal/runtime/ @R-Dson
+/internal/exclusion/ @R-Dson
+/config/seccomp/ @R-Dson

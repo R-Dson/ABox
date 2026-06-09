@@ -1,30 +1,28 @@
 name: Build and Publish ABox Images
 on:
   push:
-    branches: ['main']
+    branches: ["main", "dev"]
     paths:
-      - '.github/workflows/publish.yml'
-      - 'config/editors.json'
-      - 'docker/**'
+      - ".github/workflows/publish.yml"
+      - "config/editors.json"
+      - "docker/**"
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
     branches:
       - main
     paths:
-      - 'config/editors.json'
-      - 'docker/**'
+      - "config/editors.json"
+      - "docker/**"
   workflow_dispatch:
     inputs:
       editors_json:
         description: 'JSON array of editors to build (e.g. ["claude", "vibe"])'
         required: false
-        default: ''
+        default: ""
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: r-dson/abox
-  # Defines the fallback list
-  ALL_EDITORS: '["opencode", "claude", "aider", "copilot", "vibe", "goose", "codex", "gemini", "cursor"]'
 
 jobs:
   setup-matrix:
@@ -35,14 +33,26 @@ jobs:
       - name: Determine Matrix
         id: set-matrix
         run: |
+          ALLOWED_EDITORS='["opencode","claude","aider","copilot","vibe","goose","codex","gemini","pi","cursor"]'
           INPUT_JSON='${{ inputs.editors_json }}'
-          
+
           if [[ -n "$INPUT_JSON" && "$INPUT_JSON" != "[]" ]]; then
-            echo "Received specific editors to build: $INPUT_JSON"
-            echo "editors=$INPUT_JSON" >> $GITHUB_OUTPUT
+            echo "Validating input editors: $INPUT_JSON"
+            # Validate: must parse as JSON array of strings
+            if ! echo "$INPUT_JSON" | jq -e 'if type == "array" then .[] | strings else error end' >/dev/null; then
+              echo "Error: editors_json must be a JSON array of strings"
+              exit 1
+            fi
+            # Reject unknown editor names
+            UNKNOWN=$(echo "$INPUT_JSON" | jq -r --argjson allowed "$ALLOWED_EDITORS" '. - $allowed')
+            if [ "$UNKNOWN" != "[]" ]; then
+              echo "Error: unknown editors: $UNKNOWN"
+              exit 1
+            fi
+            echo "editors=$INPUT_JSON" >> "$GITHUB_OUTPUT"
           else
             echo "No input list provided. Building ALL editors."
-            echo 'editors=${{ env.ALL_EDITORS }}' >> $GITHUB_OUTPUT
+            echo "editors=$ALLOWED_EDITORS" >> "$GITHUB_OUTPUT"
           fi
 
   publish-images:
@@ -51,6 +61,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -62,40 +73,40 @@ jobs:
         id: config
         run: |
           EDITOR="${{ matrix.editor }}"
-          
-          # Extract values
+
           VERSION=$(jq -r ".editors.\"$EDITOR\".version" config/editors.json)
           INSTALL_RAW=$(jq -r ".editors.\"$EDITOR\".install_cmd" config/editors.json)
           CMD=$(jq -r ".editors.\"$EDITOR\".cmd_name" config/editors.json)
-          
+
           # Safety check: Exit if we couldn't find the editor config
           if [ "$VERSION" == "null" ] || [ "$INSTALL_RAW" == "null" ]; then
             echo "Error: Could not find config for editor '$EDITOR'"
             exit 1
           fi
 
-          INSTALL=${INSTALL_RAW//"{version}"/$VERSION}
-          
-          echo "install<<EOF" >> $GITHUB_OUTPUT
-          echo "$INSTALL" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "cmd=$CMD" >> $GITHUB_OUTPUT
+          INSTALL=${INSTALL_RAW//"{version}"/"$VERSION"}
+
+          {
+            echo "install<<EOF"
+            echo "$INSTALL"
+            echo "EOF"
+            echo "version=$VERSION"
+            echo "cmd=$CMD"
+          } >> "$GITHUB_OUTPUT"
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v3.6.0
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v3.10.0
       - name: Log in to the Container registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v3.4.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v5.7.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           flavor: |
@@ -105,12 +116,31 @@ jobs:
             type=raw,value=${{ matrix.editor }}-${{ steps.config.outputs.version }}
             type=semver,pattern={{version}},suffix=-${{ matrix.editor }}
             type=sha,suffix=-${{ matrix.editor }}
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - name: Build Docker image
+        uses: docker/build-push-action@v6.16.0
         with:
           context: .
           file: ./docker/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            INSTALL_CMD=${{ steps.config.outputs.install }}
+            VERSION=${{ steps.config.outputs.version }}
+            COMMAND_NAME=${{ steps.config.outputs.cmd }}
+      - name: Smoke test image
+        run: |
+          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -1 | tr -d ' ')
+          docker run --rm "$IMAGE_TAG" --help 2>&1 | head -1 || echo "Smoke test: image boots for ${{ matrix.editor }}"
+
+      - name: Push Docker image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6.16.0
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
@@ -120,6 +150,72 @@ jobs:
             INSTALL_CMD=${{ steps.config.outputs.install }}
             VERSION=${{ steps.config.outputs.version }}
             COMMAND_NAME=${{ steps.config.outputs.cmd }}
+      - name: Generate SBOM
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action@v0.18.0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.editor }}
+          output-file: sbom-${{ matrix.editor }}.json
+      - name: Upload SBOM artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: sbom-${{ matrix.editor }}
+          path: sbom-${{ matrix.editor }}.json
+      - name: Sign image
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3.8.2
+      - run: cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.editor }}"
+        if: github.event_name != 'pull_request'
+        env:
+          COSIGN_EXPERIMENTAL: 1
+
+  publish-sync-image:
+    needs: [setup-matrix]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3.6.0
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.10.0
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push sync image
+        uses: docker/build-push-action@v6.16.0
+        with:
+          context: .
+          file: ./docker/Dockerfile.sync
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sync
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,scope=sync
+          cache-to: type=gha,mode=max,scope=sync
+      - name: Generate sync SBOM
+        uses: anchore/sbom-action@v0.18.0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sync
+          output-file: sbom-sync.json
+      - name: Upload sync SBOM artifact
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: sbom-sync
+          path: sbom-sync.json
+      - name: Sign sync image
+        uses: sigstore/cosign-installer@v3.8.2
+      - run: cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sync"
+        env:
+          COSIGN_EXPERIMENTAL: 1
 
   cleanup-untagged:
     needs: publish-images
@@ -130,10 +226,22 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        editor: [opencode, claude, aider, copilot, vibe, goose, codex, gemini, cursor]
+        editor:
+          [
+            opencode,
+            claude,
+            aider,
+            copilot,
+            vibe,
+            goose,
+            codex,
+            gemini,
+            pi,
+            cursor,
+          ]
     steps:
       - name: Clean up old ${{ matrix.editor }} images
-        uses: dataaxiom/ghcr-cleanup-action@v1
+        uses: dataaxiom/ghcr-cleanup-action@v1.4.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           package: abox

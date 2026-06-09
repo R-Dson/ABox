@@ -3,47 +3,108 @@
     "opencode": {
       "version": "1.16.2",
       "install_cmd": "npm install -g opencode-ai@{version}",
-      "cmd_name": "opencode"
+      "cmd_name": "opencode",
+      "image_tag": "ghcr.io/r-dson/abox:opencode",
+      "config_path": ".config/opencode",
+      "env_vars": [],
+      "legacy_path": ".opencode"
     },
     "claude": {
       "version": "2.1.170",
       "install_cmd": "npm install -g @anthropic-ai/claude-code@{version}",
-      "cmd_name": "claude"
+      "cmd_name": "claude",
+      "image_tag": "ghcr.io/r-dson/abox:claude",
+      "config_path": ".claude",
+      "env_vars": [
+        "ANTHROPIC_API_KEY"
+      ],
+      "legacy_path": ""
     },
     "aider": {
       "version": "0.86.2",
       "install_cmd": "uv tool install aider-chat@{version}",
-      "cmd_name": "aider"
+      "cmd_name": "aider",
+      "image_tag": "ghcr.io/r-dson/abox:aider",
+      "config_path": ".aider.conf.yml",
+      "env_vars": [
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY"
+      ],
+      "legacy_path": "",
+      "config_is_file": true
     },
     "copilot": {
       "version": "1.0.60",
       "install_cmd": "npm install -g @github/copilot@{version}",
-      "cmd_name": "copilot"
+      "cmd_name": "copilot",
+      "image_tag": "ghcr.io/r-dson/abox:copilot",
+      "config_path": ".copilot",
+      "env_vars": [
+        "GITHUB_TOKEN"
+      ],
+      "legacy_path": ""
     },
     "vibe": {
       "version": "2.14.1",
       "install_cmd": "uv tool install mistral-vibe@{version}",
-      "cmd_name": "vibe"
+      "cmd_name": "vibe",
+      "image_tag": "ghcr.io/r-dson/abox:vibe",
+      "config_path": ".vibe",
+      "env_vars": [],
+      "legacy_path": ""
     },
     "goose": {
       "version": "1.37.0",
       "install_cmd": "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | GOOSE_VERSION={version} CONFIGURE=false bash",
-      "cmd_name": "goose"
+      "cmd_name": "goose",
+      "image_tag": "ghcr.io/r-dson/abox:goose",
+      "config_path": ".config/goose",
+      "env_vars": [],
+      "legacy_path": ""
     },
     "codex": {
       "version": "0.138.0",
       "install_cmd": "npm i -g @openai/codex@{version}",
-      "cmd_name": "codex"
+      "cmd_name": "codex",
+      "image_tag": "ghcr.io/r-dson/abox:codex",
+      "config_path": ".codex",
+      "env_vars": [],
+      "legacy_path": ""
+    },
+    "pi": {
+      "version": "0.75.5",
+      "install_cmd": "npm install -g --ignore-scripts @earendil-works/pi-coding-agent@{version}",
+      "cmd_name": "pi",
+      "image_tag": "ghcr.io/r-dson/abox:pi",
+      "config_path": ".pi",
+      "env_vars": [
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_OAUTH_TOKEN",
+        "OPENAI_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+        "GEMINI_API_KEY"
+      ],
+      "legacy_path": ""
     },
     "gemini": {
       "version": "0.45.2",
       "install_cmd": "npm install -g @google/gemini-cli@{version}",
-      "cmd_name": "gemini"
+      "cmd_name": "gemini",
+      "image_tag": "ghcr.io/r-dson/abox:gemini",
+      "config_path": ".gemini",
+      "env_vars": [
+        "GOOGLE_API_KEY"
+      ],
+      "legacy_path": ""
     },
     "cursor": {
       "version": "0.5.8",
       "install_cmd": "curl https://cursor.com/install -fsS | bash && mv /root/.local/bin/agent /usr/local/bin/cursor",
-      "cmd_name": "cursor"
+      "cmd_name": "cursor",
+      "image_tag": "ghcr.io/r-dson/abox:cursor",
+      "config_path": ".cursor",
+      "env_vars": [],
+      "legacy_path": ""
     }
   }
 }

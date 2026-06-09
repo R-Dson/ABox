@@ -1,0 +1,19 @@
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - revive
+    - exhaustive
+    - wrapcheck
+    - noctx
+
+linters-settings:
+  wrapcheck:
+    ignorePackageGlobs:
+      - "github.com/r-dson/abox/*"
