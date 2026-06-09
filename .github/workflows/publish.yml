@@ -158,7 +158,7 @@ jobs:
           output-file: sbom-${{ matrix.editor }}.json
       - name: Upload SBOM artifact
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7
         with:
           name: sbom-${{ matrix.editor }}
           path: sbom-${{ matrix.editor }}.json
@@ -207,7 +207,7 @@ jobs:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sync
           output-file: sbom-sync.json
       - name: Upload sync SBOM artifact
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7
         with:
           name: sbom-sync
           path: sbom-sync.json
