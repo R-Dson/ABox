@@ -79,7 +79,7 @@ func TestEditorRegistry_Names(t *testing.T) {
 		t.Fatalf("LoadEditorRegistry() error: %v", err)
 	}
 
-	expected := []string{"aider", "claude", "codex", "copilot", "gemini", "goose", "opencode", "pi", "vibe"}
+	expected := []string{"aider", "claude", "codex", "copilot", "cursor", "gemini", "goose", "opencode", "pi", "vibe"}
 	names := registry.Names()
 
 	if len(names) != len(expected) {
@@ -92,10 +92,10 @@ func TestEditorRegistry_Names(t *testing.T) {
 	}
 }
 
-func TestEditorRegistry_CursorAbsent(t *testing.T) {
+func TestEditorRegistry_CursorPresent(t *testing.T) {
 	registry, _ := config.LoadEditorRegistry()
-	if registry.Has("cursor") {
-		t.Error("cursor should not exist in registry (removed in dev branch)")
+	if !registry.Has("cursor") {
+		t.Error("cursor should exist in registry")
 	}
 }
 

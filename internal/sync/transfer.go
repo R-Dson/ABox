@@ -464,6 +464,7 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
 				return fmt.Errorf("mkdir %s: %w", target, err)
 			}
+			chownIfPossible(target)
 		case tar.TypeReg:
 			if err := ensurePathHasNoSymlink(cleanDest, filepath.Dir(target)); err != nil {
 				return err
@@ -473,6 +474,11 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			}
 			if err := ensurePathHasNoSymlink(cleanDest, target); err != nil {
 				return err
+			}
+			// Remove existing file if we can't write to it (e.g. root-owned from
+			// a previous container session). The archive is the source of truth.
+			if err := removeIfUnwritable(target); err != nil {
+				return fmt.Errorf("prepare %s: %w", target, err)
 			}
 			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
 			if err != nil {
@@ -485,6 +491,7 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			if err := f.Close(); err != nil {
 				return fmt.Errorf("close %s: %w", target, err)
 			}
+			chownIfPossible(target)
 		case tar.TypeSymlink:
 			// Resolve symlinks in the parent directory to detect previously-extracted
 			// symlinks that could redirect the new link outside the root.
@@ -517,6 +524,7 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			if err := os.Symlink(header.Linkname, target); err != nil {
 				return fmt.Errorf("create symlink %s: %w", target, err)
 			}
+			chownIfPossible(target)
 		}
 	}
 	if opts.DeleteMissing && opts.Snapshot != nil {
@@ -525,6 +533,42 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 		}
 	}
 	return nil
+}
+
+// removeIfUnwritable checks if a file can be opened for writing.
+// If the file exists but cannot be written (e.g. owned by root from a container
+// session), it is removed so the archive extraction can recreate it.
+// Returns nil if the file doesn't exist or was successfully removed.
+func removeIfUnwritable(path string) error {
+	_, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("check %s: %w", path, err)
+	}
+	// Check if we can write to it.
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err == nil {
+		_ = f.Close()
+		return nil
+	}
+	// Can't open for write — try to remove it.
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("cannot write and cannot remove %s: %w", path, err)
+	}
+	return nil
+}
+
+// chownIfPossible changes file ownership to the current process uid/gid.
+// Files created inside the editor container may be owned by root or a different uid;
+// the host user must own them for subsequent runs. Failures are logged as warnings
+// but do not block extraction — some paths may be immutable or outside our control.
+func chownIfPossible(path string) {
+	uid, gid := os.Getuid(), os.Getgid()
+	if err := os.Chown(path, uid, gid); err != nil {
+		slog.Warn("could not chown extracted file", "path", path, "error", err)
+	}
 }
 
 func reconcileMissingEntries(root string, snapshot RootSnapshot, manifest map[string]struct{}, matcher *exclusion.Matcher) error {

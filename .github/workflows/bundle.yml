@@ -1,0 +1,66 @@
+name: Bundle ABox Script
+on:
+  push:
+    branches: ['main']
+    paths:
+      - '.github/workflows/bundle.yml'
+      - 'src/**'
+      - 'Makefile'
+      - 'tests/**'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/bundle.yml'
+      - 'src/**'
+      - 'Makefile'
+      - 'tests/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Run exclusion unit tests
+        run: bash tests/exclusion-unit-test.sh
+
+  bundle:
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Bundle source files
+        run: make bundle ABX_VERSION=$(git rev-parse --short HEAD)
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: abx-script
+          path: bin/abx
+          retention-days: 1
+
+  release:
+    needs: [test, bundle]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: abx-script
+          path: bin/
+      - name: Create/Update GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: bin/abx
+          tag_name: latest
+          name: 'Latest Build (Main)'
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

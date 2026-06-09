@@ -96,6 +96,15 @@
         "GOOGLE_API_KEY"
       ],
       "legacy_path": ""
+    },
+    "cursor": {
+      "version": "0.5.8",
+      "install_cmd": "curl https://cursor.com/install -fsS | bash && mv /root/.local/bin/agent /usr/local/bin/cursor",
+      "cmd_name": "cursor",
+      "image_tag": "ghcr.io/r-dson/abox:cursor",
+      "config_path": ".cursor",
+      "env_vars": [],
+      "legacy_path": ""
     }
   }
 }
