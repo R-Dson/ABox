@@ -502,7 +502,8 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			if filepath.IsAbs(header.Linkname) {
 				return fmt.Errorf("symlink %s has absolute target %q outside destination root", target, header.Linkname)
 			}
-			// Verify the symlink target stays within the resolved destination root.
+			// Compute the final resolved target path and validate it stays within root.
+			// Use this resolved path for all subsequent operations to avoid TOCTOU races.
 			effectiveTarget := filepath.Clean(filepath.Join(resolvedParent, header.Linkname))
 			realTarget, evalErr := filepath.EvalSymlinks(effectiveTarget)
 			if evalErr == nil {
@@ -512,19 +513,19 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			if relErr != nil || relTarget == ".." || strings.HasPrefix(relTarget, ".."+string(filepath.Separator)) {
 				return fmt.Errorf("symlink %s points outside destination root: %q", target, header.Linkname)
 			}
-			if err := ensurePathHasNoSymlink(cleanDest, filepath.Dir(target)); err != nil {
+			resolvedTarget := filepath.Join(resolvedParent, filepath.Base(target))
+			if err := ensurePathHasNoSymlink(cleanDest, filepath.Dir(resolvedTarget)); err != nil {
 				return err
 			}
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return fmt.Errorf("mkdir parent %s: %w", filepath.Dir(target), err)
+			if err := os.MkdirAll(filepath.Dir(resolvedTarget), 0o755); err != nil {
+				return fmt.Errorf("mkdir parent %s: %w", filepath.Dir(resolvedTarget), err)
 			}
-			// Remove existing file/symlink before creating the new symlink.
-			// The archive is the source of truth for the session's output.
-			_ = os.Remove(target)
-			if err := os.Symlink(header.Linkname, target); err != nil {
-				return fmt.Errorf("create symlink %s: %w", target, err)
+			// Remove existing file/symlink at the resolved path before creating the new symlink.
+			_ = os.Remove(resolvedTarget)
+			if err := os.Symlink(header.Linkname, resolvedTarget); err != nil {
+				return fmt.Errorf("create symlink %s: %w", resolvedTarget, err)
 			}
-			chownIfPossible(target)
+			chownIfPossible(resolvedTarget)
 		}
 	}
 	if opts.DeleteMissing && opts.Snapshot != nil {

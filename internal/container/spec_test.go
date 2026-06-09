@@ -13,6 +13,17 @@ import (
 	"github.com/r-dson/abox/internal/runtime"
 )
 
+func TestContainerWorkdir_MatchesDockerfile(t *testing.T) {
+	// container WorkDir must match WORKDIR in docker/Dockerfile.
+	dockerfile, err := os.ReadFile("../../docker/Dockerfile")
+	if err != nil {
+		t.Fatalf("reading Dockerfile: %v", err)
+	}
+	if !strings.Contains(string(dockerfile), "WORKDIR "+container.WorkDir) {
+		t.Fatalf("Dockerfile WORKDIR does not match container WorkDir %q", container.WorkDir)
+	}
+}
+
 func TestBuildSpec_Capabilities(t *testing.T) {
 	registry, _ := config.LoadEditorRegistry()
 	profile, _ := registry.Get("claude")

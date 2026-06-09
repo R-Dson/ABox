@@ -17,35 +17,67 @@ import (
 )
 
 const (
-	containerHomeDir     = "/home/agent" // Matches the home directory created in Dockerfile
-	containerWorkDir     = "/workspace"  // Matches WORKDIR in Dockerfile
+	containerHomeDir = "/home/agent" // Matches the home directory created in Dockerfile
+	// WorkDir is the container working directory. Must match WORKDIR in docker/Dockerfile.
+	WorkDir              = "/workspace"
+	containerWorkDir     = WorkDir
 	fileConfigVolumePath = "/vol/config" // Mount point for single-file config volumes
 	readOnlyBindFlags    = "ro,z"        // Read-only bind with relabeling for SELinux
 	defaultPidsLimit     = int64(512)    // Prevent fork bombs
 )
 
-// seccompPath materializes the embedded seccomp profile to a temp file.
+// seccompCachePath returns a deterministic, user-local path for the materialized seccomp profile.
+// Using XDG_CACHE_HOME instead of /tmp avoids accumulation across invocations and is
+// lifecycle-managed by the OS (can be cleaned by xdg-cache or the user).
+func seccompCachePath() (string, error) {
+	cacheHome := os.Getenv("XDG_CACHE_HOME")
+	if cacheHome == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolving home for seccomp cache: %w", err)
+		}
+		cacheHome = filepath.Join(home, ".cache")
+	}
+	dir := filepath.Join(cacheHome, "abx")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("creating seccomp cache dir %s: %w", dir, err)
+	}
+	return filepath.Join(dir, "seccomp.json"), nil
+}
+
+// seccompPath materializes the embedded seccomp profile to a deterministic cache path.
 // The Docker API requires a filesystem path, not inline JSON.
 // Validates the JSON before writing to prevent corruption.
 var seccompPath = sync.OnceValues(func() (string, error) {
+	cachePath, err := seccompCachePath()
+	if err != nil {
+		return "", err
+	}
+
+	// Reuse existing cached profile if valid.
+	if data, readErr := os.ReadFile(cachePath); readErr == nil && json.Valid(data) {
+		return cachePath, nil
+	}
+
 	if !json.Valid(seccompprofile.ABoxDefault) {
 		return "", fmt.Errorf("embedded seccomp profile is not valid JSON")
 	}
 
-	f, err := os.CreateTemp("", "abox-seccomp-*.json")
+	f, err := os.Create(cachePath)
 	if err != nil {
-		return "", fmt.Errorf("creating seccomp temp file: %w", err)
+		return "", fmt.Errorf("creating seccomp cache file: %w", err)
 	}
 
-	path := f.Name()
 	if _, err := f.Write(seccompprofile.ABoxDefault); err != nil {
 		f.Close()
+		os.Remove(cachePath)
 		return "", fmt.Errorf("writing seccomp profile: %w", err)
 	}
 	if err := f.Close(); err != nil {
-		return "", fmt.Errorf("closing seccomp temp file: %w", err)
+		os.Remove(cachePath)
+		return "", fmt.Errorf("closing seccomp cache file: %w", err)
 	}
-	return path, nil
+	return cachePath, nil
 })
 
 // SeccompProfilePath returns the path to the materialized seccomp profile.
@@ -182,7 +214,13 @@ func sanitizedGitConfig() (string, error) {
 	}
 
 	content := sanitizeGitConfig(data)
-	f, err := os.CreateTemp("", "abox-gitconfig-*")
+
+	dir := filepath.Join(home, ".cache", "abx")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("creating gitconfig cache dir: %w", err)
+	}
+
+	f, err := os.CreateTemp(dir, "gitconfig-*")
 	if err != nil {
 		return "", fmt.Errorf("creating sanitized gitconfig: %w", err)
 	}
