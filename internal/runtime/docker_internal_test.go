@@ -18,7 +18,7 @@ func TestNormalizeSecurityOptInlinesSeccompProfilePath(t *testing.T) {
 		t.Fatalf("writing seccomp fixture: %v", err)
 	}
 
-	got, err := normalizeSecurityOpt([]string{"no-new-privileges", "seccomp=" + profilePath})
+	got, err := normalizeSecurityOpt([]string{"no-new-privileges", "seccomp=" + profilePath}, true)
 	if err != nil {
 		t.Fatalf("normalizeSecurityOpt() error = %v", err)
 	}
@@ -32,7 +32,7 @@ func TestNormalizeSecurityOptInlinesSeccompProfilePath(t *testing.T) {
 
 func TestNormalizeSecurityOptLeavesInlineSeccompAndUnconfined(t *testing.T) {
 	opts := []string{"seccomp=unconfined", `seccomp={"defaultAction":"SCMP_ACT_ALLOW"}`}
-	got, err := normalizeSecurityOpt(opts)
+	got, err := normalizeSecurityOpt(opts, true)
 	if err != nil {
 		t.Fatalf("normalizeSecurityOpt() error = %v", err)
 	}

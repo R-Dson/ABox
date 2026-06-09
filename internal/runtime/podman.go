@@ -30,7 +30,7 @@ func NewPodman(ctx context.Context) (ContainerRuntime, error) {
 		}
 		return nil, fmt.Errorf("Podman daemon unreachable: %w", err)
 	}
-	return &dockerRuntime{client: cli}, nil
+	return &dockerRuntime{client: cli, openStdinBy: make(map[string]bool)}, nil
 }
 
 func podmanSocket() (string, error) {

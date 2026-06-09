@@ -133,11 +133,11 @@ func bootstrapOwnership(ctx context.Context, rt runtime.ContainerRuntime, sess *
 	var chownTargets []string
 	var bindMounts []string
 	for _, m := range mounts {
-		bindMounts = append(bindMounts, m.name+":"+m.target)
+		bindMounts = append(bindMounts, m.name+":"+m.target+":z")
 		chownTargets = append(chownTargets, m.target)
 	}
 	if sess.Vol.WorkspaceVol != "" {
-		bindMounts = append(bindMounts, sess.Vol.WorkspaceVol+":/vol/workspace")
+		bindMounts = append(bindMounts, sess.Vol.WorkspaceVol+":/vol/workspace:z")
 		chownTargets = append(chownTargets, "/vol/workspace")
 	}
 

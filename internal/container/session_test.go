@@ -49,8 +49,8 @@ func TestCreateSession_BootstrapHelperHasSecurityDefaults(t *testing.T) {
 	if !slices.Contains(bootstrapSpec.CapDrop, "ALL") {
 		t.Fatalf("bootstrap helper CapDrop = %v, want ALL", bootstrapSpec.CapDrop)
 	}
-	if slices.Contains(bootstrapSpec.CapAdd, "DAC_OVERRIDE") {
-		t.Fatalf("bootstrap helper CapAdd = %v, must not include DAC_OVERRIDE", bootstrapSpec.CapAdd)
+	if !slices.Contains(bootstrapSpec.CapAdd, "DAC_OVERRIDE") {
+		t.Fatalf("bootstrap helper CapAdd = %v, must include DAC_OVERRIDE for volume writes", bootstrapSpec.CapAdd)
 	}
 	if !slices.Contains(bootstrapSpec.SecurityOpt, "no-new-privileges") {
 		t.Fatalf("bootstrap helper SecurityOpt = %v, want no-new-privileges", bootstrapSpec.SecurityOpt)

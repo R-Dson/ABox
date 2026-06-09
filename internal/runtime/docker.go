@@ -19,9 +19,10 @@ import (
 )
 
 type dockerRuntime struct {
-	client      *dockerclient.Client
-	stdinMu     sync.Mutex
-	openStdinBy map[string]bool
+	client        *dockerclient.Client
+	inlineSeccomp bool // Docker accepts inline JSON; Podman requires file paths
+	stdinMu       sync.Mutex
+	openStdinBy   map[string]bool
 }
 
 // Compile-time interface check.
@@ -50,7 +51,7 @@ func NewDocker(ctx context.Context) (ContainerRuntime, error) {
 		}
 		return nil, fmt.Errorf("Docker daemon unreachable: %w", err)
 	}
-	return &dockerRuntime{client: cli}, nil
+	return &dockerRuntime{client: cli, inlineSeccomp: true, openStdinBy: make(map[string]bool)}, nil
 }
 
 func (d *dockerRuntime) VolumeCreate(ctx context.Context, name string, labels map[string]string) error {
@@ -90,7 +91,7 @@ func (d *dockerRuntime) NetworkRemove(ctx context.Context, id string) error {
 }
 
 func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec) (string, error) {
-	containerConfig, hostConfig, err := dockerCreateConfigs(spec)
+	containerConfig, hostConfig, err := dockerCreateConfigs(spec, d.inlineSeccomp)
 	if err != nil {
 		return "", err
 	}
@@ -103,7 +104,7 @@ func (d *dockerRuntime) ContainerCreate(ctx context.Context, spec ContainerSpec)
 	return resp.ID, nil
 }
 
-func dockerCreateConfigs(spec ContainerSpec) (*dockercontainer.Config, *dockercontainer.HostConfig, error) {
+func dockerCreateConfigs(spec ContainerSpec, inlineSeccomp bool) (*dockercontainer.Config, *dockercontainer.HostConfig, error) {
 	containerConfig := &dockercontainer.Config{
 		Image:        spec.Image,
 		Cmd:          spec.Cmd,
@@ -130,35 +131,52 @@ func dockerCreateConfigs(spec ContainerSpec) (*dockercontainer.Config, *dockerco
 			mountType = dockermount.TypeVolume
 		}
 
-		mount := dockermount.Mount{
+		dockerMount := dockermount.Mount{
 			Type:   mountType,
 			Source: src,
 			Target: dst,
 		}
 		if mountType == dockermount.TypeVolume {
-			mount.VolumeOptions = &dockermount.VolumeOptions{NoCopy: true}
+			dockerMount.VolumeOptions = &dockermount.VolumeOptions{NoCopy: true}
 		}
 		for _, opt := range opts {
 			if opt == "ro" {
-				mount.ReadOnly = true
+				dockerMount.ReadOnly = true
 			}
-			// "z" and "Z" are SELinux relabeling flags handled by
-			// the Docker daemon; no API field needed.
 		}
-		mounts = append(mounts, mount)
+		mounts = append(mounts, dockerMount)
 	}
 
-	securityOpt, err := normalizeSecurityOpt(spec.SecurityOpt)
+	securityOpt, err := normalizeSecurityOpt(spec.SecurityOpt, inlineSeccomp)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	// Raw Binds carry SELinux :z/:Z relabeling flags that the Docker SDK
+	// Mount type does not support. When any bind has these flags, pass all
+	// binds through HostConfig.Binds exclusively and skip typed Mounts.
+	var rawBinds []string
+	useRawBinds := false
+	for _, bind := range spec.Binds {
+		_, _, opts := parseBind(bind)
+		for _, opt := range opts {
+			if opt == "z" || opt == "Z" {
+				useRawBinds = true
+			}
+		}
+		rawBinds = append(rawBinds, bind)
+	}
+
 	hostConfig := &dockercontainer.HostConfig{
-		Mounts:      mounts,
 		CapDrop:     spec.CapDrop,
 		CapAdd:      spec.CapAdd,
 		SecurityOpt: securityOpt,
 		AutoRemove:  spec.AutoRemove,
+	}
+	if useRawBinds {
+		hostConfig.Binds = rawBinds
+	} else {
+		hostConfig.Mounts = mounts
 	}
 	if spec.Init {
 		hostConfig.Init = new(true)
@@ -197,11 +215,17 @@ func dockerMountFromSpec(mount Mount) dockermount.Mount {
 	return dockerMount
 }
 
-func normalizeSecurityOpt(opts []string) ([]string, error) {
+func normalizeSecurityOpt(opts []string, inlineSeccomp bool) ([]string, error) {
 	normalized := make([]string, 0, len(opts))
 	for _, opt := range opts {
 		profile, ok := strings.CutPrefix(opt, "seccomp=")
 		if !ok || profile == "unconfined" || strings.HasPrefix(strings.TrimSpace(profile), "{") {
+			normalized = append(normalized, opt)
+			continue
+		}
+
+		if !inlineSeccomp {
+			// Podman requires a file path; pass it through unchanged.
 			normalized = append(normalized, opt)
 			continue
 		}

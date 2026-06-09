@@ -57,8 +57,8 @@ func TestSyncIn(t *testing.T) {
 	if !slices.Contains(spec.CapAdd, "CHOWN") {
 		t.Fatalf("sync container CapAdd = %v, want CHOWN", spec.CapAdd)
 	}
-	if slices.Contains(spec.CapAdd, "DAC_OVERRIDE") {
-		t.Fatalf("sync container CapAdd = %v, must not include DAC_OVERRIDE", spec.CapAdd)
+	if !slices.Contains(spec.CapAdd, "DAC_OVERRIDE") {
+		t.Fatalf("sync container CapAdd = %v, must include DAC_OVERRIDE for volume writes", spec.CapAdd)
 	}
 	if spec.NetworkMode != "none" {
 		t.Fatalf("sync container NetworkMode = %q, want none", spec.NetworkMode)

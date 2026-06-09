@@ -462,12 +462,12 @@ func (r *callRecorder) shouldFail(method string) error {
 
 func (r *callRecorder) recordContainerVolume(id string, spec runtime.ContainerSpec) {
 	for _, bind := range spec.Binds {
-		volume, target, ok := strings.Cut(bind, ":")
-		if !ok || target != "/data" {
+		parts := strings.SplitN(bind, ":", 3)
+		if len(parts) < 2 || parts[1] != "/data" {
 			continue
 		}
 		r.mu.Lock()
-		r.containerVolumeByID[id] = volume
+		r.containerVolumeByID[id] = parts[0]
 		r.mu.Unlock()
 		return
 	}

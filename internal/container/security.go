@@ -19,7 +19,7 @@ func ApplyHelperSecurityDefaults(spec *runtime.ContainerSpec) error {
 	}
 	spec.NetworkMode = "none"
 	spec.CapDrop = []string{"ALL"}
-	spec.CapAdd = []string{"CHOWN"}
+	spec.CapAdd = []string{"CHOWN", "DAC_OVERRIDE"}
 	spec.SecurityOpt = []string{"no-new-privileges", "seccomp=" + seccompPath}
 	spec.Memory = helperMemoryBytes
 	spec.NanoCPUs = helperNanoCPUs

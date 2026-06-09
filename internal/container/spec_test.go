@@ -108,17 +108,17 @@ func TestBuildSpec_EditorDataMountTargets(t *testing.T) {
 	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{})
 
 	want := map[string]bool{
-		"abox-config-test:/home/agent/.claude":            false,
-		"abox-cache-test:/home/agent/.cache/claude":       false,
-		"abox-state-test:/home/agent/.local/state/claude": false,
-		"abox-share-test:/home/agent/.local/share/claude": false,
-		"/host/project:/workspace":                        false,
+		"abox-config-test:/home/agent/.claude:z":            false,
+		"abox-cache-test:/home/agent/.cache/claude:z":       false,
+		"abox-state-test:/home/agent/.local/state/claude:z": false,
+		"abox-share-test:/home/agent/.local/share/claude:z": false,
+		"/host/project:/workspace:z":                        false,
 	}
 	for _, bind := range spec.Binds {
 		if _, ok := want[bind]; ok {
 			want[bind] = true
 		}
-		if bind == "abox-config-test:/vol/config" {
+		if bind == "abox-config-test:/vol/config:z" {
 			t.Fatalf("config volume mounted at legacy sync path %q", bind)
 		}
 	}
@@ -284,7 +284,7 @@ func TestBuildSpec_MountsSSHAgentSocketWhenEnabled(t *testing.T) {
 
 	spec := mustBuildSpec(t, profile, sess, "/host/project", &config.Config{ForwardSSHAgent: true})
 
-	want := socketPath + ":/tmp/ssh-agent.sock:ro"
+	want := socketPath + ":/tmp/ssh-agent.sock:ro,z"
 	for _, bind := range spec.Binds {
 		if bind == want {
 			return
@@ -307,10 +307,10 @@ func TestBuildSpec_FileConfigProfileUsesSymlinkWrapper(t *testing.T) {
 
 	foundConfigBind := false
 	for _, bind := range spec.Binds {
-		if bind == "abox-config-test:/vol/config" {
+		if bind == "abox-config-test:/vol/config:z" {
 			foundConfigBind = true
 		}
-		if bind == "abox-config-test:/home/agent/.aider.conf.yml" {
+		if bind == "abox-config-test:/home/agent/.aider.conf.yml:z" {
 			t.Fatalf("file config volume must not mount directly to file path: %q", bind)
 		}
 	}

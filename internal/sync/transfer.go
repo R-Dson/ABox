@@ -235,7 +235,7 @@ func mountVolumeContainer(ctx context.Context, rt runtime.ContainerRuntime, volu
 		Image:      runtime.SyncImage,
 		Cmd:        []string{"sleep", "300"},
 		AutoRemove: false,
-		Binds:      []string{volumeName + ":/data"},
+		Binds:      []string{volumeName + ":/data:z"},
 	}
 	if err := containerpkg.ApplyHelperSecurityDefaults(&spec); err != nil {
 		return "", nil, err

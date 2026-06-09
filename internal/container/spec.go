@@ -137,30 +137,30 @@ func buildBinds(profile config.EditorProfile, sess *Session, workdir string, cfg
 	}
 
 	binds := []string{
-		sess.Vol.ConfigVol + ":" + configMountPath,
-		sess.Vol.CacheVol + ":" + profile.CachePath(containerHomeDir),
-		sess.Vol.StateVol + ":" + profile.StatePath(containerHomeDir),
-		sess.Vol.ShareVol + ":" + profile.SharePath(containerHomeDir),
+		sess.Vol.ConfigVol + ":" + configMountPath + ":z",
+		sess.Vol.CacheVol + ":" + profile.CachePath(containerHomeDir) + ":z",
+		sess.Vol.StateVol + ":" + profile.StatePath(containerHomeDir) + ":z",
+		sess.Vol.ShareVol + ":" + profile.SharePath(containerHomeDir) + ":z",
 	}
 
 	if profile.LegacyPath != "" {
-		binds = append(binds, sess.Vol.ConfigVol+":"+filepath.Join(containerHomeDir, profile.LegacyPath))
+		binds = append(binds, sess.Vol.ConfigVol+":"+filepath.Join(containerHomeDir, profile.LegacyPath)+":z")
 	}
 
 	if sess.Vol.WorkspaceVol != "" {
-		binds = append(binds, sess.Vol.WorkspaceVol+":"+containerWorkDir)
+		binds = append(binds, sess.Vol.WorkspaceVol+":"+containerWorkDir+":z")
 	} else {
-		binds = append(binds, workdir+":"+containerWorkDir)
+		binds = append(binds, workdir+":"+containerWorkDir+":z")
 	}
 
 	if cfg.ForwardSSHAgent {
 		if sock := sshAgentSocket(); sock != "" {
-			binds = append(binds, sock+":/tmp/ssh-agent.sock:ro")
+			binds = append(binds, sock+":/tmp/ssh-agent.sock:ro,z")
 		}
 	}
 	if cfg.ForwardGitConfig {
 		if path, err := sanitizedGitConfig(); err == nil {
-			binds = append(binds, path+":"+filepath.Join(containerHomeDir, ".gitconfig")+":ro")
+			binds = append(binds, path+":"+filepath.Join(containerHomeDir, ".gitconfig")+":ro,z")
 		}
 	}
 

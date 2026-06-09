@@ -14,7 +14,7 @@ func TestDockerMapping_ExplicitMountType(t *testing.T) {
 			{Type: MountTypeVolume, Source: "/path-shaped-volume", Target: "/data", NoCopy: true},
 			{Type: MountTypeBind, Source: "relative-bind-name", Target: "/bind", ReadOnly: true},
 		},
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("dockerCreateConfigs() error = %v", err)
 	}
@@ -52,7 +52,7 @@ func TestDockerMapping_PropagatesNetworkEnvResourcesSecurity(t *testing.T) {
 		PidsLimit:   128,
 		Memory:      256,
 		NanoCPUs:    500,
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("dockerCreateConfigs() error = %v", err)
 	}
@@ -78,13 +78,13 @@ func TestDockerMapping_PropagatesNetworkEnvResourcesSecurity(t *testing.T) {
 	if len(hostConfig.SecurityOpt) != 2 || hostConfig.SecurityOpt[0] != "no-new-privileges" {
 		t.Fatalf("SecurityOpt = %v", hostConfig.SecurityOpt)
 	}
-	if len(hostConfig.Mounts) != 2 {
-		t.Fatalf("Mounts = %v, want 2", hostConfig.Mounts)
+	if len(hostConfig.Binds) != 2 {
+		t.Fatalf("Binds = %v, want 2", hostConfig.Binds)
 	}
-	if hostConfig.Mounts[0].Type != dockermount.TypeBind || !hostConfig.Mounts[0].ReadOnly {
-		t.Fatalf("first mount = %+v, want read-only bind", hostConfig.Mounts[0])
+	if hostConfig.Binds[0] != "/host/work:/workspace:ro,z" {
+		t.Fatalf("first bind = %q, want /host/work:/workspace:ro,z", hostConfig.Binds[0])
 	}
-	if hostConfig.Mounts[1].Type != dockermount.TypeVolume || hostConfig.Mounts[1].VolumeOptions == nil || !hostConfig.Mounts[1].VolumeOptions.NoCopy {
-		t.Fatalf("second mount = %+v, want nocopy volume", hostConfig.Mounts[1])
+	if hostConfig.Binds[1] != "named-volume:/data" {
+		t.Fatalf("second bind = %q, want named-volume:/data", hostConfig.Binds[1])
 	}
 }
