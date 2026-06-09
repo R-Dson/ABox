@@ -58,6 +58,9 @@ func TestCreateSession_BootstrapHelperHasSecurityDefaults(t *testing.T) {
 	if bootstrapSpec.Memory == 0 || bootstrapSpec.NanoCPUs == 0 {
 		t.Fatalf("bootstrap helper resources = memory %d nanoCPUs %d, want bounded", bootstrapSpec.Memory, bootstrapSpec.NanoCPUs)
 	}
+	if bootstrapSpec.PidsLimit <= 0 {
+		t.Fatalf("bootstrap helper PidsLimit = %d, want positive", bootstrapSpec.PidsLimit)
+	}
 }
 
 func TestVolumes_CleanupOnCreateErrorRemovesCreatedVolumes(t *testing.T) {

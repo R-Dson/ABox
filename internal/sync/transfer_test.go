@@ -69,6 +69,9 @@ func TestSyncIn(t *testing.T) {
 	if spec.Memory == 0 || spec.NanoCPUs == 0 {
 		t.Fatalf("sync helper resources = memory %d nanoCPUs %d, want bounded", spec.Memory, spec.NanoCPUs)
 	}
+	if spec.PidsLimit <= 0 {
+		t.Fatalf("sync helper PidsLimit = %d, want positive", spec.PidsLimit)
+	}
 }
 
 func TestSyncIn_CopyToContainerFailureUnblocksTarGoroutine(t *testing.T) {

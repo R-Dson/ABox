@@ -9,6 +9,7 @@ import (
 const (
 	helperMemoryBytes = 256 * 1024 * 1024
 	helperNanoCPUs    = 500_000_000
+	helperPidsLimit   = int64(64) // Limit fork bombs in short-lived helpers
 )
 
 // ApplyHelperSecurityDefaults applies the shared hardening profile for short-lived helper containers.
@@ -23,5 +24,6 @@ func ApplyHelperSecurityDefaults(spec *runtime.ContainerSpec) error {
 	spec.SecurityOpt = []string{"no-new-privileges", "seccomp=" + seccompPath}
 	spec.Memory = helperMemoryBytes
 	spec.NanoCPUs = helperNanoCPUs
+	spec.PidsLimit = helperPidsLimit
 	return nil
 }

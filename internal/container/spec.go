@@ -61,12 +61,16 @@ func BuildSpec(profile config.EditorProfile, sess *Session, workdir string, cfg 
 	}
 
 	spec := runtime.ContainerSpec{
-		Image:       profile.ImageTag,
-		Cmd:         buildCommand(profile),
-		Env:         buildEnv(profile, cfg.ForwardSSHAgent),
-		WorkingDir:  containerWorkDir,
-		Tty:         true,
-		OpenStdin:   true,
+		Image:      profile.ImageTag,
+		Cmd:        buildCommand(profile),
+		Env:        buildEnv(profile, cfg.ForwardSSHAgent),
+		WorkingDir: containerWorkDir,
+		Tty:        true,
+		OpenStdin:  true,
+		// CapDrop ALL then selectively add:
+		//   CHOWN  - entrypoint chown of persistent volumes
+		//   SETUID - gosu privilege drop from root to agent user
+		//   SETGID - gosu group switching
 		CapDrop:     []string{"ALL"},
 		CapAdd:      []string{"CHOWN", "SETUID", "SETGID"},
 		SecurityOpt: []string{"no-new-privileges", "seccomp=" + seccompProfilePath},
