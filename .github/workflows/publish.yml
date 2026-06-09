@@ -49,10 +49,10 @@ jobs:
               echo "Error: unknown editors: $UNKNOWN"
               exit 1
             fi
-            echo "editors=$INPUT_JSON" >> $GITHUB_OUTPUT
+            echo "editors=$INPUT_JSON" >> "$GITHUB_OUTPUT"
           else
             echo "No input list provided. Building ALL editors."
-            echo "editors=$ALLOWED_EDITORS" >> $GITHUB_OUTPUT
+            echo "editors=$ALLOWED_EDITORS" >> "$GITHUB_OUTPUT"
           fi
 
   publish-images:

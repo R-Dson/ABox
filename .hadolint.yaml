@@ -4,3 +4,4 @@
 # Dockerfile already uses digest-pinned base images for reproducibility.
 ignored:
   - DL3008
+  - DL3018

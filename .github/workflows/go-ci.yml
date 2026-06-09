@@ -53,6 +53,7 @@ jobs:
         run: |
           # cmd/abx is main-only; runtime has pure unit tests and is included.
           PACKAGES=$(go list ./... | grep -v -E 'cmd/abx$')
+          # shellcheck disable=SC2086 # word splitting is intentional for package list
           go test -race -coverprofile=coverage.out $PACKAGES
       - name: Check coverage
         run: |

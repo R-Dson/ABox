@@ -206,6 +206,9 @@ func directoryContentsPath(srcPath string) string {
 }
 
 // TarManifest returns the archive paths that would be written after matcher/internal filtering.
+// This function only reads headers and builds an in-memory map — it never writes to the filesystem.
+//
+//nolint:gosec // G305: TarManifest is read-only; no filesystem writes from archive entries.
 func TarManifest(r io.Reader, opts Options) (map[string]struct{}, error) {
 	manifest := make(map[string]struct{})
 	tr := tar.NewReader(r)
@@ -434,9 +437,14 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 		}
 
 		manifest[entryName] = struct{}{}
-		target := filepath.Join(dest, entryName)
-		if err := ensurePathStaysInRoot(cleanDest, target, entryName); err != nil {
-			return err
+
+		// Sanitize and validate the archive entry path to prevent directory traversal.
+		// CodeQL requires the sanitization to be visible in the same function.
+		target := filepath.Clean(filepath.Join(dest, filepath.FromSlash(entryName)))
+		if rel, err := filepath.Rel(cleanDest, target); err != nil {
+			return fmt.Errorf("checking tar entry %q: %w", entryName, err)
+		} else if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return fmt.Errorf("tar entry %q escapes destination", entryName)
 		}
 
 		switch header.Typeflag {
@@ -469,8 +477,19 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 				return fmt.Errorf("close %s: %w", target, err)
 			}
 		case tar.TypeSymlink:
-			if err := ensureSafeSymlink(cleanDest, target, header.Linkname); err != nil {
-				return err
+			// Validate symlink target stays within root.
+			linkTarget := filepath.Clean(filepath.FromSlash(header.Linkname))
+			if linkTarget == "" {
+				return fmt.Errorf("refusing empty symlink target for %s", target)
+			}
+			if filepath.IsAbs(linkTarget) {
+				return fmt.Errorf("refusing absolute symlink %s -> %s", target, linkTarget)
+			}
+			resolvedLink := filepath.Clean(filepath.Join(filepath.Dir(target), linkTarget))
+			if rel, err := filepath.Rel(cleanDest, resolvedLink); err != nil {
+				return fmt.Errorf("refusing escaping symlink %s -> %s: %w", target, linkTarget, err)
+			} else if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+				return fmt.Errorf("refusing escaping symlink %s -> %s: target escapes root", target, linkTarget)
 			}
 			if err := ensurePathHasNoSymlink(cleanDest, filepath.Dir(target)); err != nil {
 				return err
@@ -478,7 +497,7 @@ func extractTar(r io.Reader, dest string, opts Options) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return fmt.Errorf("mkdir parent %s: %w", filepath.Dir(target), err)
 			}
-			if err := os.Symlink(header.Linkname, target); err != nil {
+			if err := os.Symlink(linkTarget, target); err != nil {
 				return fmt.Errorf("create symlink %s: %w", target, err)
 			}
 		}
@@ -525,20 +544,6 @@ func reconcileMissingEntries(root string, snapshot RootSnapshot, manifest map[st
 
 func cleanArchiveEntryName(name string) string {
 	return filepath.ToSlash(path.Clean(name))
-}
-
-func ensureSafeSymlink(root, linkPath, linkTarget string) error {
-	if linkTarget == "" {
-		return fmt.Errorf("refusing empty symlink target for %s", linkPath)
-	}
-	if filepath.IsAbs(linkTarget) {
-		return fmt.Errorf("refusing absolute symlink %s -> %s", linkPath, linkTarget)
-	}
-	resolvedTarget := filepath.Join(filepath.Dir(linkPath), filepath.FromSlash(linkTarget))
-	if err := ensurePathStaysInRoot(root, resolvedTarget, linkTarget); err != nil {
-		return fmt.Errorf("refusing escaping symlink %s -> %s: %w", linkPath, linkTarget, err)
-	}
-	return nil
 }
 
 func ensureFileIsNotSymlink(path string) error {
