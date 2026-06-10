@@ -21,7 +21,6 @@
 - **Gemini / Antigravity** (`gemini`)
 - **Codex** (`codex`)
 - **Pi** (`pi`)
-- **Cursor** (`cursor`)
 
 ## Prerequisites
 

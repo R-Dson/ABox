@@ -33,7 +33,7 @@ jobs:
       - name: Determine Matrix
         id: set-matrix
         run: |
-          ALLOWED_EDITORS='["opencode","claude","copilot","codex","gemini","pi","cursor"]'
+          ALLOWED_EDITORS='["opencode","claude","copilot","codex","gemini","pi"]'
           INPUT_JSON='${{ inputs.editors_json }}'
 
           if [[ -n "$INPUT_JSON" && "$INPUT_JSON" != "[]" ]]; then
@@ -226,7 +226,7 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        editor: [opencode, claude, copilot, codex, gemini, pi, cursor]
+        editor: [opencode, claude, copilot, codex, gemini, pi]
     steps:
       - name: Clean up old ${{ matrix.editor }} images
         uses: dataaxiom/ghcr-cleanup-action@v1.2.2
