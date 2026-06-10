@@ -1,7 +1,7 @@
 {
   "editors": {
     "opencode": {
-      "version": "1.16.2",
+      "version": "1.17.0",
       "install_cmd": "npm install -g opencode-ai@{version}",
       "cmd_name": "opencode",
       "image_tag": "ghcr.io/r-dson/abox:opencode",
@@ -34,7 +34,7 @@
       "config_is_file": true
     },
     "copilot": {
-      "version": "1.0.60",
+      "version": "1.0.61",
       "install_cmd": "npm install -g @github/copilot@{version}",
       "cmd_name": "copilot",
       "image_tag": "ghcr.io/r-dson/abox:copilot",
@@ -63,7 +63,7 @@
       "legacy_path": ""
     },
     "codex": {
-      "version": "0.138.0",
+      "version": "0.139.0",
       "install_cmd": "npm i -g @openai/codex@{version}",
       "cmd_name": "codex",
       "image_tag": "ghcr.io/r-dson/abox:codex",
@@ -87,7 +87,7 @@
       "legacy_path": ""
     },
     "gemini": {
-      "version": "0.45.2",
+      "version": "0.46.0",
       "install_cmd": "npm install -g @google/gemini-cli@{version}",
       "cmd_name": "gemini",
       "image_tag": "ghcr.io/r-dson/abox:gemini",
