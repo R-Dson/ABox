@@ -17,7 +17,9 @@ func TestPullProgress_AggregatesPercent(t *testing.T) {
 		`{"status":"Downloading","progressDetail":{"current":50,"total":100},"id":"bbb"}`,
 	}
 	for _, line := range lines {
-		p.Write([]byte(line + "\n"))
+		if _, err := p.Write([]byte(line + "\n")); err != nil {
+			t.Fatalf("Write() error: %v", err)
+		}
 	}
 
 	out := buf.String()
@@ -40,8 +42,12 @@ func TestPullProgress_IgnoresNonDownload(t *testing.T) {
 	p := newPullProgress(&buf, "test-image")
 	buf.Reset()
 
-	p.Write([]byte(`{"status":"Pulling from library/alpine","id":""}` + "\n"))
-	p.Write([]byte(`{"status":"Already exists","id":"aaa"}` + "\n"))
+	if _, err := p.Write([]byte(`{"status":"Pulling from library/alpine","id":""}` + "\n")); err != nil {
+		t.Fatalf("Write() error: %v", err)
+	}
+	if _, err := p.Write([]byte(`{"status":"Already exists","id":"aaa"}` + "\n")); err != nil {
+		t.Fatalf("Write() error: %v", err)
+	}
 
 	if buf.Len() != 0 {
 		t.Errorf("expected no additional output for non-download status, got %q", buf.String())
