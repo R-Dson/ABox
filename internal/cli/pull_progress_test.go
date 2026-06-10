@@ -9,6 +9,8 @@ import (
 func TestPullProgress_AggregatesPercent(t *testing.T) {
 	var buf bytes.Buffer
 	p := newPullProgress(&buf, "test-image")
+	p.isTTY = true // force TTY mode for test
+	buf.Reset()
 
 	lines := []string{
 		`{"status":"Downloading","progressDetail":{"current":100,"total":200},"id":"aaa"}`,
@@ -36,8 +38,6 @@ func TestPullProgress_PrintsInitialPrefix(t *testing.T) {
 func TestPullProgress_IgnoresNonDownload(t *testing.T) {
 	var buf bytes.Buffer
 	p := newPullProgress(&buf, "test-image")
-
-	// Clear the initial prefix written by constructor
 	buf.Reset()
 
 	p.Write([]byte(`{"status":"Pulling from library/alpine","id":""}` + "\n"))
@@ -48,14 +48,29 @@ func TestPullProgress_IgnoresNonDownload(t *testing.T) {
 	}
 }
 
-func TestPullProgress_Finish(t *testing.T) {
+func TestPullProgress_FinishNonTTY(t *testing.T) {
 	var buf bytes.Buffer
 	p := newPullProgress(&buf, "test-image")
 	buf.Reset()
 
 	p.finish()
 
-	if got := buf.String(); got != "\n" {
-		t.Errorf("got %q, want %q", got, "\n")
+	want := "Pulling test-image... done.\n"
+	if got := buf.String(); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestPullProgress_FinishTTY(t *testing.T) {
+	var buf bytes.Buffer
+	p := newPullProgress(&buf, "test-image")
+	p.isTTY = true
+	buf.Reset()
+
+	p.finish()
+
+	want := "\rPulling test-image... done.\n"
+	if got := buf.String(); got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

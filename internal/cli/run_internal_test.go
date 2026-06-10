@@ -112,13 +112,13 @@ func TestEnsureEditorDataDirsCreatesDirectoryBackedPaths(t *testing.T) {
 
 func TestEnsureEditorDataDirsDoesNotCreateFileBackedConfig(t *testing.T) {
 	home := t.TempDir()
-	profile := config.EditorProfile{CmdName: "aider", ConfigPath: ".aider.conf.yml", ConfigIsFile: true}
+	profile := config.EditorProfile{CmdName: "testeditor", ConfigPath: ".testeditor.conf", ConfigIsFile: true}
 
 	if err := ensureEditorDataDirs(profile, home); err != nil {
 		t.Fatalf("ensureEditorDataDirs() error = %v", err)
 	}
 
-	configPath := filepath.Join(home, ".aider.conf.yml")
+	configPath := filepath.Join(home, ".testeditor.conf")
 	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
 		t.Fatalf("file-backed config path should not be created, stat error = %v", err)
 	}

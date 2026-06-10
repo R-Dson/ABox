@@ -20,19 +20,6 @@
       ],
       "legacy_path": ""
     },
-    "aider": {
-      "version": "0.86.2",
-      "install_cmd": "uv tool install aider-chat@{version}",
-      "cmd_name": "aider",
-      "image_tag": "ghcr.io/r-dson/abox:aider",
-      "config_path": ".aider.conf.yml",
-      "env_vars": [
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY"
-      ],
-      "legacy_path": "",
-      "config_is_file": true
-    },
     "copilot": {
       "version": "1.0.61",
       "install_cmd": "npm install -g @github/copilot@{version}",
@@ -42,24 +29,6 @@
       "env_vars": [
         "GITHUB_TOKEN"
       ],
-      "legacy_path": ""
-    },
-    "vibe": {
-      "version": "2.14.1",
-      "install_cmd": "uv tool install mistral-vibe@{version}",
-      "cmd_name": "vibe",
-      "image_tag": "ghcr.io/r-dson/abox:vibe",
-      "config_path": ".vibe",
-      "env_vars": [],
-      "legacy_path": ""
-    },
-    "goose": {
-      "version": "1.37.0",
-      "install_cmd": "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | GOOSE_VERSION={version} CONFIGURE=false bash",
-      "cmd_name": "goose",
-      "image_tag": "ghcr.io/r-dson/abox:goose",
-      "config_path": ".config/goose",
-      "env_vars": [],
       "legacy_path": ""
     },
     "codex": {
@@ -87,9 +56,9 @@
       "legacy_path": ""
     },
     "gemini": {
-      "version": "0.46.0",
-      "install_cmd": "npm install -g @google/gemini-cli@{version}",
-      "cmd_name": "gemini",
+      "version": "1.0.7",
+      "install_cmd": "curl -fsSL https://antigravity.google/cli/install.sh | bash && mv /root/.local/bin/agy /usr/local/bin/agy",
+      "cmd_name": "agy",
       "image_tag": "ghcr.io/r-dson/abox:gemini",
       "config_path": ".gemini",
       "env_vars": [

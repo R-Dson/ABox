@@ -265,7 +265,7 @@ func TestRunSession_SyncsMissingFileConfigBack(t *testing.T) {
 	rec := newCallRecorder()
 
 	_ = cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
-		Editor: "aider",
+		Editor: "claude",
 	})
 
 	copyFromCalls := len(filter(rec.methods(), "CopyFromContainer"))

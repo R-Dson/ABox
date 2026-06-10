@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 )
 
 // pullProgress parses Docker image pull JSON stream and displays
 // a single-line aggregate percentage on the terminal.
+// When stderr is not a TTY, only the initial prefix and final newline are printed.
 type pullProgress struct {
 	w      io.Writer
 	prefix string
+	isTTY  bool
 	buf    []byte
 	layers map[string]struct{ current, total int64 }
 }
@@ -20,6 +23,7 @@ func newPullProgress(w io.Writer, image string) *pullProgress {
 	p := &pullProgress{
 		w:      w,
 		prefix: fmt.Sprintf("Pulling %s...", image),
+		isTTY:  isTerminalFile(os.Stderr),
 		layers: make(map[string]struct{ current, total int64 }),
 	}
 	fmt.Fprint(w, p.prefix)
@@ -61,7 +65,9 @@ func (p *pullProgress) processLine(line []byte) {
 	layer.total = msg.ProgressDetail.Total
 	p.layers[msg.ID] = layer
 
-	p.render()
+	if p.isTTY {
+		p.render()
+	}
 }
 
 func (p *pullProgress) render() {
@@ -78,5 +84,8 @@ func (p *pullProgress) render() {
 }
 
 func (p *pullProgress) finish() {
-	fmt.Fprint(p.w, "\n")
+	if p.isTTY {
+		fmt.Fprint(p.w, "\r")
+	}
+	fmt.Fprint(p.w, p.prefix+" done.\n")
 }

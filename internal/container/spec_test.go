@@ -305,8 +305,11 @@ func TestBuildSpec_MountsSSHAgentSocketWhenEnabled(t *testing.T) {
 }
 
 func TestBuildSpec_FileConfigProfileUsesSymlinkWrapper(t *testing.T) {
-	registry, _ := config.LoadEditorRegistry()
-	profile, _ := registry.Get("aider")
+	profile := config.EditorProfile{
+		CmdName:      "testeditor",
+		ConfigPath:   ".testeditor.conf",
+		ConfigIsFile: true,
+	}
 	sess := container.NewSession("test", nil, container.Volumes{
 		ConfigVol: "abox-config-test",
 		CacheVol:  "abox-cache-test",
@@ -321,20 +324,20 @@ func TestBuildSpec_FileConfigProfileUsesSymlinkWrapper(t *testing.T) {
 		if bind == "abox-config-test:/vol/config:z" {
 			foundConfigBind = true
 		}
-		if bind == "abox-config-test:/home/agent/.aider.conf.yml:z" {
+		if bind == "abox-config-test:/home/agent/.testeditor.conf:z" {
 			t.Fatalf("file config volume must not mount directly to file path: %q", bind)
 		}
 	}
 	if !foundConfigBind {
 		t.Fatalf("missing file config bind to /vol/config in %v", spec.Binds)
 	}
-	if len(spec.Cmd) != 4 || spec.Cmd[0] != "sh" || spec.Cmd[1] != "-lc" || spec.Cmd[3] != "aider" {
+	if len(spec.Cmd) != 4 || spec.Cmd[0] != "sh" || spec.Cmd[1] != "-lc" || spec.Cmd[3] != "testeditor" {
 		t.Fatalf("file config command should be shell wrapper with argv0 placeholder, got %v", spec.Cmd)
 	}
-	if !strings.Contains(spec.Cmd[2], "ln -sf /vol/config/.aider.conf.yml /home/agent/.aider.conf.yml") {
+	if !strings.Contains(spec.Cmd[2], "ln -sf /vol/config/.testeditor.conf /home/agent/.testeditor.conf") {
 		t.Fatalf("file config command missing symlink setup: %q", spec.Cmd[2])
 	}
-	if !strings.Contains(spec.Cmd[2], "exec aider \"$@\"") {
+	if !strings.Contains(spec.Cmd[2], "exec testeditor \"$@\"") {
 		t.Fatalf("file config command missing editor exec with arg forwarding: %q", spec.Cmd[2])
 	}
 }

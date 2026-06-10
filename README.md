@@ -17,13 +17,11 @@
 
 - **OpenCode** (`opencode`) — Default
 - **Claude Code** (`claude`)
-- **Aider** (`aider`)
 - **GitHub Copilot** (`copilot`)
-- **Goose** (`goose`)
-- **Gemini** (`gemini`)
+- **Gemini / Antigravity** (`gemini`)
 - **Codex** (`codex`)
 - **Pi** (`pi`)
-- **Mistral Vibe** (`vibe`)
+- **Cursor** (`cursor`)
 
 ## Prerequisites
 

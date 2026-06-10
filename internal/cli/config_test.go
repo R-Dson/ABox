@@ -27,7 +27,7 @@ func TestConfigCmd_ListEditors(t *testing.T) {
 	}
 
 	// Should contain known editors from embedded registry
-	editors := []string{"aider", "claude", "opencode", "codex"}
+	editors := []string{"claude", "opencode", "codex"}
 	for _, name := range editors {
 		if !bytes.Contains([]byte(output), []byte(name)) {
 			t.Errorf("output missing editor %q: %s", name, output)

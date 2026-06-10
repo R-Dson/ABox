@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       editors_json:
-        description: 'JSON array of editors to build (e.g. ["claude", "vibe"])'
+        description: 'JSON array of editors to build (e.g. ["claude", "codex"])'
         required: false
         default: ""
 env:
@@ -33,7 +33,7 @@ jobs:
       - name: Determine Matrix
         id: set-matrix
         run: |
-          ALLOWED_EDITORS='["opencode","claude","aider","copilot","vibe","goose","codex","gemini","pi","cursor"]'
+          ALLOWED_EDITORS='["opencode","claude","copilot","codex","gemini","pi","cursor"]'
           INPUT_JSON='${{ inputs.editors_json }}'
 
           if [[ -n "$INPUT_JSON" && "$INPUT_JSON" != "[]" ]]; then
@@ -226,19 +226,7 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        editor:
-          [
-            opencode,
-            claude,
-            aider,
-            copilot,
-            vibe,
-            goose,
-            codex,
-            gemini,
-            pi,
-            cursor,
-          ]
+        editor: [opencode, claude, copilot, codex, gemini, pi, cursor]
     steps:
       - name: Clean up old ${{ matrix.editor }} images
         uses: dataaxiom/ghcr-cleanup-action@v1.2.2

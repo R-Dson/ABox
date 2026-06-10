@@ -79,7 +79,7 @@ func TestEditorRegistry_Names(t *testing.T) {
 		t.Fatalf("LoadEditorRegistry() error: %v", err)
 	}
 
-	expected := []string{"aider", "claude", "codex", "copilot", "cursor", "gemini", "goose", "opencode", "pi", "vibe"}
+	expected := []string{"claude", "codex", "copilot", "cursor", "gemini", "opencode", "pi"}
 	names := registry.Names()
 
 	if len(names) != len(expected) {
@@ -117,12 +117,9 @@ func TestEditorRegistry_FieldsCorrect(t *testing.T) {
 	}{
 		{"claude fields", "claude", "ghcr.io/r-dson/abox:claude", "claude", ".claude", []string{"ANTHROPIC_API_KEY"}, "", false},
 		{"opencode fields", "opencode", "ghcr.io/r-dson/abox:opencode", "opencode", ".config/opencode", []string{}, ".opencode", false},
-		{"aider fields", "aider", "ghcr.io/r-dson/abox:aider", "aider", ".aider.conf.yml", []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY"}, "", true},
 		{"codex fields", "codex", "ghcr.io/r-dson/abox:codex", "codex", ".codex", []string{}, "", false},
 		{"copilot fields", "copilot", "ghcr.io/r-dson/abox:copilot", "copilot", ".copilot", []string{"GITHUB_TOKEN"}, "", false},
-		{"gemini fields", "gemini", "ghcr.io/r-dson/abox:gemini", "gemini", ".gemini", []string{"GOOGLE_API_KEY"}, "", false},
-		{"goose fields", "goose", "ghcr.io/r-dson/abox:goose", "goose", ".config/goose", []string{}, "", false},
-		{"vibe fields", "vibe", "ghcr.io/r-dson/abox:vibe", "vibe", ".vibe", []string{}, "", false},
+		{"gemini fields", "gemini", "ghcr.io/r-dson/abox:gemini", "agy", ".gemini", []string{"GOOGLE_API_KEY"}, "", false},
 	}
 
 	for _, tt := range tests {
@@ -211,8 +208,8 @@ func TestHomeDir(t *testing.T) {
 }
 
 func TestDefaultEditorConstantSingleSource(t *testing.T) {
-	if config.DefaultEditor != "opencode" {
-		t.Fatalf("DefaultEditor = %q, want opencode", config.DefaultEditor)
+	if config.DefaultEditor != "pi" {
+		t.Fatalf("DefaultEditor = %q, want pi", config.DefaultEditor)
 	}
 	v := viper.New()
 	cfg, err := config.Load(v)
@@ -302,7 +299,7 @@ func TestLoad_Defaults(t *testing.T) {
 		got  any
 		want any
 	}{
-		{"default editor", cfg.Editor, "opencode"},
+		{"default editor", cfg.Editor, "pi"},
 		{"default pull policy", cfg.PullPolicy, "missing"},
 		{"default memory limit", cfg.MemoryLimit, "4g"},
 		{"default cpu limit", cfg.CPULimit, 2.0},
@@ -398,7 +395,7 @@ func TestLoad_MissingConfigFileIsFine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() with missing config should not error: %v", err)
 	}
-	if cfg.Editor != "opencode" {
-		t.Errorf("default Editor = %q, want opencode", cfg.Editor)
+	if cfg.Editor != "pi" {
+		t.Errorf("default Editor = %q, want pi", cfg.Editor)
 	}
 }

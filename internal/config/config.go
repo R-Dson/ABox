@@ -9,7 +9,7 @@ import (
 )
 
 // DefaultEditor is the editor used when no editor is configured or requested.
-const DefaultEditor = "opencode"
+const DefaultEditor = "pi"
 
 // Config holds all user-configurable settings.
 type Config struct {

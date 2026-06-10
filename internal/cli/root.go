@@ -68,7 +68,7 @@ func NewRootCmdWithVersion(versionInfo VersionInfo) *cobra.Command {
 
 	// Register run flags directly on root
 	cfg := &SessionConfig{}
-	root.Flags().StringVar(&cfg.Editor, "editor", "", "editor to use (aider|claude|codex|copilot|gemini|goose|opencode|pi|vibe)")
+	root.Flags().StringVar(&cfg.Editor, "editor", "", "editor to use (claude|codex|copilot|cursor|gemini|opencode|pi)")
 	root.Flags().BoolVar(&cfg.Shell, "shell", false, "drop into an interactive shell")
 	root.Flags().BoolVar(&cfg.ForceIT, "force-it", false, "force interactive TTY allocation")
 	root.Flags().BoolVar(&cfg.Offline, "offline", false, "do not pull images")
