@@ -241,7 +241,7 @@ jobs:
           ]
     steps:
       - name: Clean up old ${{ matrix.editor }} images
-        uses: dataaxiom/ghcr-cleanup-action@v1.4.0
+        uses: dataaxiom/ghcr-cleanup-action@v1.2.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           package: abox
