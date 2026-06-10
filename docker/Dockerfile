@@ -12,7 +12,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl wget ca-certificates git unzip gosu procps jq ripgrep \
     build-essential locales openssl file bzip2 \
-    python3 python3-pip python3-venv nodejs npm \
+    python3 python3-dev python3-pip python3-venv nodejs npm \
     nano vim && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 

@@ -31,7 +31,7 @@ type Config struct {
 // Missing config file is not an error — defaults apply.
 func Load(v *viper.Viper) (*Config, error) {
 	v.SetDefault("editor", DefaultEditor)
-	v.SetDefault("pull_policy", "never")
+	v.SetDefault("pull_policy", "missing")
 	v.SetDefault("memory_limit", "4g")
 	v.SetDefault("cpu_limit", 2.0)
 	v.SetDefault("trust_workspace_env", false)

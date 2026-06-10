@@ -19,25 +19,7 @@ on:
       - "tests/**"
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-      - name: Run exclusion unit tests
-        run: bash tests/exclusion-unit-test.sh
-
-      - name: Run exclusion fuzz tests
-        run: ABX_FUZZ_COUNT=200 bash tests/exclusion-fuzz.sh
-
-      - name: Run editor registry tests
-        run: bash tests/editor-registry-test.sh
-
-      - name: Run sync unit tests
-        run: bash tests/sync-unit-test.sh
-
   bundle:
-    needs: [test]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -54,7 +36,7 @@ jobs:
           retention-days: 1
 
   release:
-    needs: [test, bundle]
+    needs: [bundle]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

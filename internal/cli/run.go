@@ -329,7 +329,7 @@ func validateSessionConfig(cfg *SessionConfig) error {
 	}
 	pullPolicy := cfg.PullPolicy
 	if pullPolicy == "" {
-		pullPolicy = pullPolicyNever
+		pullPolicy = pullPolicyMissing
 	}
 	if pullPolicy != pullPolicyNever && pullPolicy != pullPolicyAlways && pullPolicy != pullPolicyMissing {
 		return fmt.Errorf("unsupported pull policy %q: use always, missing, or never", pullPolicy)
@@ -387,7 +387,7 @@ func mergeEnv(base, extra []string) ([]string, error) {
 func ensureRequiredImages(ctx context.Context, rt runtime.ContainerRuntime, editorImage string, cfg *SessionConfig) error {
 	pullPolicy := cfg.PullPolicy
 	if pullPolicy == "" {
-		pullPolicy = pullPolicyNever
+		pullPolicy = pullPolicyMissing
 	}
 	if cfg.Offline || cfg.NoInternet {
 		pullPolicy = pullPolicyNever

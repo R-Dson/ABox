@@ -28,7 +28,7 @@ if [ "$OS" != "linux" ] && [ "$OS" != "darwin" ]; then
     exit 1
 fi
 
-ARTIFACT="${BINARY_NAME}_${OS}_${ARCH}.tar.gz"
+ARTIFACT="${BINARY_NAME}_${OS}_${ARCH}"
 RELEASE_URL="https://github.com/$REPO/releases/latest/download/$ARTIFACT"
 CHECKSUM_URL="https://github.com/$REPO/releases/latest/download/checksums.txt"
 
@@ -78,7 +78,7 @@ sha256_file() {
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
-# Download binary archive
+# Download binary
 echo "Downloading $ARTIFACT..."
 if ! curl -fsSL "$RELEASE_URL" -o "$TMPDIR/$ARTIFACT"; then
     echo "Error: Failed to download abx."
@@ -106,15 +106,14 @@ if [ "$EXPECTED" != "$ACTUAL" ]; then
 fi
 echo "Integrity verified."
 
-# Extract and install
-tar -xzf "$TMPDIR/$ARTIFACT" -C "$TMPDIR" "$BINARY_NAME"
-chmod +x "$TMPDIR/$BINARY_NAME"
+# Install
+chmod +x "$TMPDIR/$ARTIFACT"
 
 echo "Installing to $INSTALL_DIR..."
 if [ "$USE_SUDO" = true ] && [ ! -w "$INSTALL_DIR" ]; then
-    sudo mv "$TMPDIR/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+    sudo mv "$TMPDIR/$ARTIFACT" "$INSTALL_DIR/$BINARY_NAME"
 else
-    mv "$TMPDIR/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+    mv "$TMPDIR/$ARTIFACT" "$INSTALL_DIR/$BINARY_NAME"
 fi
 
 echo ""

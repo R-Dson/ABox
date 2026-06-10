@@ -15,8 +15,12 @@ builds:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
 archives:
-  - name_template: "abx_{{ .Os }}_{{ .Arch }}"
+  - id: tarball
+    name_template: "abx_{{ .Os }}_{{ .Arch }}"
     format: tar.gz
+  - id: binary
+    name_template: "abx_{{ .Os }}_{{ .Arch }}"
+    format: binary
 
 checksum:
   name_template: "checksums.txt"

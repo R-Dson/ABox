@@ -210,7 +210,23 @@ func TestRunSession_NoInternetRejectsExcludeURL(t *testing.T) {
 	}
 }
 
-func TestRunSession_DefaultPullPolicySkipsImagePull(t *testing.T) {
+func TestRunSession_NeverPullPolicySkipsImagePull(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	rec := newCallRecorder()
+	rec.imageExists = false
+
+	_ = cli.RunSession(t.Context(), rec.stub(), dir, &cli.SessionConfig{
+		Editor:     "opencode",
+		PullPolicy: "never",
+	})
+
+	if len(filter(rec.methods(), "ImagePull")) != 0 {
+		t.Error("never pull policy must not pull images")
+	}
+}
+
+func TestRunSession_DefaultPullPolicyPullsWhenMissing(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
 	rec := newCallRecorder()
@@ -220,8 +236,8 @@ func TestRunSession_DefaultPullPolicySkipsImagePull(t *testing.T) {
 		Editor: "opencode",
 	})
 
-	if len(filter(rec.methods(), "ImagePull")) != 0 {
-		t.Error("default pull policy must not auto-pull mutable image tags")
+	if len(filter(rec.methods(), "ImagePull")) == 0 {
+		t.Error("default (missing) pull policy must pull when image is absent")
 	}
 }
 

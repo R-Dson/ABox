@@ -303,7 +303,7 @@ func TestLoad_Defaults(t *testing.T) {
 		want any
 	}{
 		{"default editor", cfg.Editor, "opencode"},
-		{"default pull policy", cfg.PullPolicy, "never"},
+		{"default pull policy", cfg.PullPolicy, "missing"},
 		{"default memory limit", cfg.MemoryLimit, "4g"},
 		{"default cpu limit", cfg.CPULimit, 2.0},
 		{"default SSH agent forwarding", cfg.ForwardSSHAgent, false},
