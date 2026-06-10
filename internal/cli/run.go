@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -210,6 +209,7 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 		syncRoots = append(syncRoots, sessionSyncRoot{name: "workspace", volume: sess.Vol.WorkspaceVol, hostPath: workdir, matcher: matcher})
 	}
 
+	fmt.Fprintln(os.Stderr, "Syncing files...")
 	g, gctx := errgroup.WithContext(ctx)
 	for _, root := range syncRoots {
 		root := root
@@ -224,6 +224,8 @@ func RunSession(ctx context.Context, rt runtime.ContainerRuntime, workdir string
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("parallel sync-in: %w", err)
 	}
+
+	fmt.Fprintln(os.Stderr, "Starting", editorName+"...")
 
 	spec, err := container.BuildSpec(profile, sess, workdir, resolvedConfig)
 	if err != nil {
@@ -424,9 +426,12 @@ func ensureImage(ctx context.Context, rt runtime.ContainerRuntime, image, pullPo
 	case pullPolicyNever:
 		return nil
 	case pullPolicyAlways:
-		if err := rt.ImagePull(ctx, image, io.Discard); err != nil {
+		p := newPullProgress(os.Stderr, image)
+		if err := rt.ImagePull(ctx, image, p); err != nil {
+			p.finish()
 			return fmt.Errorf("pulling image %s: %w", image, err)
 		}
+		p.finish()
 		return nil
 	case pullPolicyMissing:
 		exists, err := rt.ImageExists(ctx, image)
@@ -436,9 +441,12 @@ func ensureImage(ctx context.Context, rt runtime.ContainerRuntime, image, pullPo
 		if exists {
 			return nil
 		}
-		if err := rt.ImagePull(ctx, image, io.Discard); err != nil {
+		p := newPullProgress(os.Stderr, image)
+		if err := rt.ImagePull(ctx, image, p); err != nil {
+			p.finish()
 			return fmt.Errorf("pulling image %s: %w", image, err)
 		}
+		p.finish()
 		return nil
 	default:
 		return fmt.Errorf("unsupported pull policy %q: use always, missing, or never", pullPolicy)
