@@ -12,9 +12,7 @@ import (
 )
 
 var (
-	version        = "dev"
 	commit         = "unknown"
-	date           = "unknown"
 	newRootCmdFunc = cli.NewRootCmdWithVersion
 )
 
@@ -26,7 +24,7 @@ func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	root := newRootCmdFunc(cli.VersionInfo{Version: version, Commit: commit, Date: date})
+	root := newRootCmdFunc(cli.VersionInfo{Commit: commit})
 	if err := root.ExecuteContext(ctx); err != nil {
 		if exitErr, ok := errors.AsType[*cli.ExitError](err); ok {
 			return exitErr.Code

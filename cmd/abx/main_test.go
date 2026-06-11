@@ -13,22 +13,16 @@ import (
 
 func TestRunPassesVersionMetadata(t *testing.T) {
 	oldNewRootCmd := newRootCmdFunc
-	oldVersion := version
 	oldCommit := commit
-	oldDate := date
 	defer func() {
 		newRootCmdFunc = oldNewRootCmd
-		version = oldVersion
 		commit = oldCommit
-		date = oldDate
 	}()
-	version = "1.2.3"
 	commit = "abc123"
-	date = "2026-06-08T00:00:00Z"
 
 	newRootCmdFunc = func(info cli.VersionInfo) *cobra.Command {
-		if info.Version != version || info.Commit != commit || info.Date != date {
-			t.Fatalf("VersionInfo = %+v, want version/commit/date", info)
+		if info.Commit != commit {
+			t.Fatalf("VersionInfo = %+v, want commit=%s", info, commit)
 		}
 		return &cobra.Command{Use: "test"}
 	}

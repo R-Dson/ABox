@@ -23,8 +23,8 @@ var (
 // NewRootCmd creates the root command for abx.
 // The root command IS the run command — `abx [flags] [dir]` runs an editor.
 // Subcommands (audit, config, version, completion) are registered separately.
-func NewRootCmd(version string) *cobra.Command {
-	return NewRootCmdWithVersion(VersionInfo{Version: version, Commit: "unknown", Date: "unknown"})
+func NewRootCmd(_ string) *cobra.Command {
+	return NewRootCmdWithVersion(VersionInfo{Commit: "unknown"})
 }
 
 // NewRootCmdWithVersion creates the root command with full build metadata.
@@ -33,6 +33,7 @@ func NewRootCmdWithVersion(versionInfo VersionInfo) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "abx [flags] [directory] [editor args...]",
 		Short:         "Secure sandbox for AI coding editors",
+		Version:       versionInfo.Commit,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.ArbitraryArgs,
