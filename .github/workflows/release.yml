@@ -33,7 +33,7 @@ jobs:
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="$LDFLAGS" -o dist/abx_darwin_arm64 ./cmd/abx
 
       - name: Generate checksums
-        run: cd dist && sha256sum * > checksums.txt
+        run: cd dist && sha256sum -- * > checksums.txt
 
       - name: Delete old release assets
         env:
