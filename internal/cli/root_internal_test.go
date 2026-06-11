@@ -162,7 +162,7 @@ func TestApplyLoadedConfigDefaults(t *testing.T) {
 
 func TestApplyLoadedConfig_PreservesExplicitFlags(t *testing.T) {
 	cmd, cfg := testConfigCommand()
-	if err := cmd.ParseFlags([]string{"--editor", "gemini", "--strict-network=false", "--no-internet=false"}); err != nil {
+	if err := cmd.ParseFlags([]string{"--editor", "antigravity", "--strict-network=false", "--no-internet=false"}); err != nil {
 		t.Fatalf("ParseFlags() error: %v", err)
 	}
 	loaded := &config.Config{
@@ -175,8 +175,8 @@ func TestApplyLoadedConfig_PreservesExplicitFlags(t *testing.T) {
 
 	applyLoadedConfig(cmd, cfg, loaded)
 
-	if cfg.Editor != "gemini" {
-		t.Errorf("Editor = %q, want gemini", cfg.Editor)
+	if cfg.Editor != "antigravity" {
+		t.Errorf("Editor = %q, want antigravity", cfg.Editor)
 	}
 	if cfg.StrictNetwork {
 		t.Error("StrictNetwork explicit false flag should override loaded config")

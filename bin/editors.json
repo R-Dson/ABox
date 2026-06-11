@@ -55,12 +55,12 @@
       ],
       "legacy_path": ""
     },
-    "gemini": {
-      "version": "0.46.0",
+    "antigravity": {
+      "version": "1.0.7",
       "install_cmd": "curl -fsSL https://antigravity.google/cli/install.sh | bash && mv /root/.local/bin/agy /usr/local/bin/agy",
       "cmd_name": "agy",
-      "image_tag": "ghcr.io/r-dson/abox:gemini",
-      "config_path": ".gemini",
+      "image_tag": "ghcr.io/r-dson/abox:antigravity",
+      "config_path": ".antigravity",
       "env_vars": [
         "GOOGLE_API_KEY"
       ],

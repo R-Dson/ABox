@@ -79,7 +79,7 @@ func TestEditorRegistry_Names(t *testing.T) {
 		t.Fatalf("LoadEditorRegistry() error: %v", err)
 	}
 
-	expected := []string{"claude", "codex", "copilot", "gemini", "opencode", "pi"}
+	expected := []string{"antigravity", "claude", "codex", "copilot", "opencode", "pi"}
 	names := registry.Names()
 
 	if len(names) != len(expected) {
@@ -119,7 +119,7 @@ func TestEditorRegistry_FieldsCorrect(t *testing.T) {
 		{"opencode fields", "opencode", "ghcr.io/r-dson/abox:opencode", "opencode", ".config/opencode", []string{}, ".opencode", false},
 		{"codex fields", "codex", "ghcr.io/r-dson/abox:codex", "codex", ".codex", []string{}, "", false},
 		{"copilot fields", "copilot", "ghcr.io/r-dson/abox:copilot", "copilot", ".copilot", []string{"GITHUB_TOKEN"}, "", false},
-		{"gemini fields", "gemini", "ghcr.io/r-dson/abox:gemini", "agy", ".gemini", []string{"GOOGLE_API_KEY"}, "", false},
+		{"antigravity fields", "antigravity", "ghcr.io/r-dson/abox:antigravity", "agy", ".antigravity", []string{"GOOGLE_API_KEY"}, "", false},
 	}
 
 	for _, tt := range tests {
@@ -373,7 +373,7 @@ func TestLoad_ReadsJSONConfig(t *testing.T) {
 }
 
 func TestLoad_EnvOverride(t *testing.T) {
-	t.Setenv("ABX_EDITOR", "gemini")
+	t.Setenv("ABX_EDITOR", "antigravity")
 
 	v := viper.New()
 	v.SetEnvPrefix("ABX")
@@ -383,8 +383,8 @@ func TestLoad_EnvOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if cfg.Editor != "gemini" {
-		t.Errorf("Editor with ABX_EDITOR=gemini = %q, want gemini", cfg.Editor)
+	if cfg.Editor != "antigravity" {
+		t.Errorf("Editor with ABX_EDITOR=antigravity = %q, want antigravity", cfg.Editor)
 	}
 }
 

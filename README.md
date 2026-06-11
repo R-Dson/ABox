@@ -18,7 +18,7 @@
 - **OpenCode** (`opencode`) — Default
 - **Claude Code** (`claude`)
 - **GitHub Copilot** (`copilot`)
-- **Gemini / Antigravity** (`gemini`)
+- **Antigravity** (`antigravity`)
 - **Codex** (`codex`)
 - **Pi** (`pi`)
 
