@@ -47,6 +47,11 @@ jobs:
             gh release delete-asset "$TAG" "$asset" --repo "$REPO" --yes 2>/dev/null || true
           done
 
+      - name: Move latest tag to current commit
+        run: |
+          git tag -f latest HEAD
+          git push origin latest --force
+
       - name: Update latest release
         uses: softprops/action-gh-release@v2
         with:
