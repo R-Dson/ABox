@@ -164,7 +164,7 @@ jobs:
           path: sbom-${{ matrix.editor }}.json
       - name: Sign image
         if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@v3.8.2
+        uses: sigstore/cosign-installer@v4.1.2
       - run: cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.editor }}"
         if: github.event_name != 'pull_request'
         env:
@@ -212,7 +212,7 @@ jobs:
           name: sbom-sync
           path: sbom-sync.json
       - name: Sign sync image
-        uses: sigstore/cosign-installer@v3.8.2
+        uses: sigstore/cosign-installer@v4.1.2
       - run: cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sync"
         env:
           COSIGN_EXPERIMENTAL: 1
