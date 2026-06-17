@@ -152,7 +152,7 @@ jobs:
             COMMAND_NAME=${{ steps.config.outputs.cmd }}
       - name: Generate SBOM
         if: github.event_name != 'pull_request'
-        uses: anchore/sbom-action@v0.18.0
+        uses: anchore/sbom-action@v0.24.0
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.editor }}
           output-file: sbom-${{ matrix.editor }}.json
@@ -202,7 +202,7 @@ jobs:
           cache-from: type=gha,scope=sync
           cache-to: type=gha,mode=max,scope=sync
       - name: Generate sync SBOM
-        uses: anchore/sbom-action@v0.18.0
+        uses: anchore/sbom-action@v0.24.0
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sync
           output-file: sbom-sync.json
