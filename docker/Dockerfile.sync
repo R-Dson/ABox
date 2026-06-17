@@ -1,4 +1,4 @@
-FROM alpine@sha256:4f4ba248d8a2c90a6e52ffdfc194181f7617f9ddaca348d4c550a6b354fc7c2a
+FROM alpine@sha256:f5064d3e5f88c467c714509f491853ab2d951932c5cad699c0cb969dcec6f3b4
 # DL3018 accepted: alpine package versions are tied to the digest-pinned base image.
 # hadolint ignore=DL3018
 RUN apk add --no-cache tar shadow
