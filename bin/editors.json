@@ -10,7 +10,7 @@
       "legacy_path": ".opencode"
     },
     "claude": {
-      "version": "2.1.216",
+      "version": "2.1.217",
       "install_cmd": "npm install -g @anthropic-ai/claude-code@{version}",
       "cmd_name": "claude",
       "image_tag": "ghcr.io/r-dson/abox:claude",
@@ -32,7 +32,7 @@
       "legacy_path": ""
     },
     "codex": {
-      "version": "0.144.6",
+      "version": "0.145.0",
       "install_cmd": "npm i -g @openai/codex@{version}",
       "cmd_name": "codex",
       "image_tag": "ghcr.io/r-dson/abox:codex",
