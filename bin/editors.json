@@ -21,7 +21,7 @@
       "legacy_path": ""
     },
     "copilot": {
-      "version": "1.0.73",
+      "version": "1.0.74",
       "install_cmd": "npm install -g @github/copilot@{version}",
       "cmd_name": "copilot",
       "image_tag": "ghcr.io/r-dson/abox:copilot",
