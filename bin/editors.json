@@ -1,7 +1,7 @@
 {
   "editors": {
     "opencode": {
-      "version": "1.18.9",
+      "version": "1.18.10",
       "install_cmd": "npm install -g opencode-ai@{version}",
       "cmd_name": "opencode",
       "image_tag": "ghcr.io/r-dson/abox:opencode",
@@ -21,7 +21,7 @@
       "legacy_path": ""
     },
     "copilot": {
-      "version": "1.0.76",
+      "version": "1.0.77",
       "install_cmd": "npm install -g @github/copilot@{version}",
       "cmd_name": "copilot",
       "image_tag": "ghcr.io/r-dson/abox:copilot",
