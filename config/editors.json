@@ -1,7 +1,7 @@
 {
   "editors": {
     "opencode": {
-      "version": "1.18.15",
+      "version": "1.18.16",
       "install_cmd": "npm install -g opencode-ai@{version}",
       "cmd_name": "opencode",
       "image_tag": "ghcr.io/r-dson/abox:opencode",
