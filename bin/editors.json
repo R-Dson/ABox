@@ -10,7 +10,7 @@
       "legacy_path": ".opencode"
     },
     "claude": {
-      "version": "2.1.229",
+      "version": "2.1.232",
       "install_cmd": "npm install -g @anthropic-ai/claude-code@{version}",
       "cmd_name": "claude",
       "image_tag": "ghcr.io/r-dson/abox:claude",
@@ -21,7 +21,7 @@
       "legacy_path": ""
     },
     "copilot": {
-      "version": "1.0.79",
+      "version": "1.0.80",
       "install_cmd": "npm install -g @github/copilot@{version}",
       "cmd_name": "copilot",
       "image_tag": "ghcr.io/r-dson/abox:copilot",
