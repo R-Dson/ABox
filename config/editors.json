@@ -1,7 +1,7 @@
 {
   "editors": {
     "opencode": {
-      "version": "1.18.25",
+      "version": "1.18.26",
       "install_cmd": "npm install -g opencode-ai@{version}",
       "cmd_name": "opencode",
       "image_tag": "ghcr.io/r-dson/abox:opencode",
@@ -10,7 +10,7 @@
       "legacy_path": ".opencode"
     },
     "claude": {
-      "version": "2.1.252",
+      "version": "2.1.258",
       "install_cmd": "npm install -g @anthropic-ai/claude-code@{version}",
       "cmd_name": "claude",
       "image_tag": "ghcr.io/r-dson/abox:claude",
@@ -32,7 +32,7 @@
       "legacy_path": ""
     },
     "codex": {
-      "version": "0.152.0",
+      "version": "0.152.1",
       "install_cmd": "npm i -g @openai/codex@{version}",
       "cmd_name": "codex",
       "image_tag": "ghcr.io/r-dson/abox:codex",
