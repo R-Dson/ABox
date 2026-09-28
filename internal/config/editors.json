@@ -1,7 +1,7 @@
 {
   "editors": {
     "opencode": {
-      "version": "1.18.32",
+      "version": "1.18.33",
       "install_cmd": "npm install -g opencode-ai@{version}",
       "cmd_name": "opencode",
       "image_tag": "ghcr.io/r-dson/abox:opencode",
@@ -32,7 +32,7 @@
       "legacy_path": ""
     },
     "codex": {
-      "version": "0.157.1",
+      "version": "0.158.0",
       "install_cmd": "npm i -g @openai/codex@{version}",
       "cmd_name": "codex",
       "image_tag": "ghcr.io/r-dson/abox:codex",
